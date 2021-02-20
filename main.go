@@ -24,10 +24,6 @@ func main() {
 	createMaps()
 	defaultCommands()
 
-	value := "ooga"
-	kv := KeyValue{hashString(value), value}
-	fmt.Println(kv)
-
 	commandLoop()
 }
 

@@ -1,10 +1,9 @@
 package main
 
 import (
-	"crypto/sha1"
+	"errors"
 	"fmt"
 	"log"
-	"math/big"
 	"net"
 	"regexp"
 	"strings"
@@ -39,19 +38,11 @@ func centerText(text string, size int, fill rune) string {
 }
 
 // Validate an address (host IP + port)
-func validateAddress(address string) bool {
+func validateAddress(address string) (Address, error) {
 	// Regex for <IPv4>:<PORT>
 	matched, _ := regexp.Match(`^(?:\d+\.){3}\d+:(?:\d?){4}\d$`, []byte(address))
-	return matched
-}
-
-func hashString(elt string) *big.Int {
-	hasher := sha1.New()
-	hasher.Write([]byte(elt))
-	return new(big.Int).SetBytes(hasher.Sum(nil))
-}
-
-func (kv KeyValue) String() string {
-	hex := fmt.Sprintf("%040x", kv.Key)
-	return fmt.Sprintf("%s.. (%s)", hex[:8], string(kv.Value))
+	if matched {
+		return Address(address), nil
+	}
+	return Address(address), errors.New("invalid address format: <host>:<port>")
 }

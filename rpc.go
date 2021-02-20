@@ -1,34 +1,12 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
-)
-
-type (
-	// Node is a part of the chord ring
-	Node struct {
-		Host        string
-		Port        string
-		Successors  [numSuccessors]string
-		Predecessor string
-		Fingers     []string          // The finger table pointing to other nodes on the ring
-		Data        map[string]string // The data items stored at this node
-	}
-
-	Address string
-	Key     string
-
-	// KeyValue is a data item to be stored
-	KeyValue struct {
-		Key   string
-		Value string
-	}
-
-	// None is a null value
-	None struct{}
 )
 
 const (
@@ -39,9 +17,9 @@ const (
 // Start the RPC server
 func startNode() {
 	currentNode = &Node{
-		Host: host,
-		Port: port,
-		Data: make(map[string]string),
+		Address: Address(host + ":" + port),
+		Hash:    currentNode.Address.hashed(),
+		Data:    make(map[Key]string),
 	}
 	rpc.Register(currentNode)
 	rpc.HandleHTTP()
@@ -54,8 +32,8 @@ func startNode() {
 }
 
 // The RPC call
-func call(address string, method string, request interface{}, reply interface{}) error {
-	client, err := rpc.DialHTTP("tcp", address)
+func call(address Address, method string, request interface{}, reply interface{}) error {
+	client, err := rpc.DialHTTP("tcp", string(address))
 	if err != nil {
 		log.Printf("rpc call dialing: %v", err)
 		return err
@@ -77,13 +55,46 @@ func (n *Node) Ping(request None, reply *bool) error {
 	return nil
 }
 
-// FindSuccesor finds the successor node of they key with given id
-func (n *Node) FindSuccesor(id string, address *string) error {
-	// If it is one of our successors
-	if between(n.address(), id, n.Successors[len(n.Successors)-1], true) {
+// Find returns the address of the node responsible for the given key
+func (n *Node) find(key Key) (Address, error) {
+	hash := key.hashed()
+	result := &AddressResult{false, n.Address}
+	i := 0
+	// Check locally
+	currentNode.FindSuccesor(key, result)
+	for !result.Found && i < maxRequests {
+		if err := call(
+			result.Address,
+			"Node.FindSuccesor",
+			hash,
+			result,
+		); err != nil {
+			return n.Address, fmt.Errorf("find node: %v", err)
+		}
+		i++
+	}
+	if result.Found {
+		return result.Address, nil
+	}
+	return n.Address, errors.New("could not find node responsible for the key")
+}
 
+// FindSuccesor finds the nearest successor node of they key with given id
+func (n *Node) FindSuccesor(key Key, result *AddressResult) error {
+	id := key.hashed()
+	// If it is one of our successors
+	if between(n.Hash, id, n.Successors[len(n.Successors)-1].hashed(), true) {
+		// Loop from nearest to farthest to find successor
+		for _, s := range n.Successors {
+			// Triggers on the nearest successor
+			if id.Cmp(s.hashed()) < 0 {
+				*result = AddressResult{true, s}
+			}
+		}
 	} else {
-		call(n.Successors[0], "Node.FindSuccessor", id, address)
+		// call(n.Successors[0], "Node.FindSuccessor", id, address)
+		// Give address of last successor
+		*result = AddressResult{false, n.Successors[len(n.Successors)-1]}
 	}
 	return nil
 }
@@ -125,13 +136,14 @@ func (n *Node) Put(data *KeyValue, reply *None) error {
 }
 
 // Get retrieves the value of a key in the database
-func (n *Node) Get(key string, reply *string) error {
-	*reply = n.Data[key]
+func (n *Node) Get(key Key, value *string) error {
+	*value = n.Data[key]
 	return nil
 }
 
 // Delete removes a key and its associated value from the database
-func (n *Node) Delete(key string, reply *None) error {
+func (n *Node) Delete(key Key, value *string) error {
+	*value = n.Data[key]
 	delete(n.Data, key)
 	return nil
 }

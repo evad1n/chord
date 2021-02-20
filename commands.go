@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strconv"
@@ -215,17 +216,17 @@ func changePort(p string) {
 }
 
 func ping(address string) {
-	if validateAddress((address)) {
+	if addr, err := validateAddress((address)); err == nil {
 		fmt.Printf("Attempting to ping %s...\n", address)
 		var success bool
-		call(address, "Node.Ping", None{}, &success)
+		call(addr, "Node.Ping", None{}, &success)
 		if success {
 			fmt.Println("Success")
 		} else {
 			fmt.Println(ansiWrap("Error", ansiColors["red"]))
 		}
 	} else {
-		fmt.Println(ansiWrap("bad address: <host>:<port>", ansiColors["red"]))
+		fmt.Printf(ansiWrap(err.Error(), ansiColors["red"]))
 	}
 }
 
@@ -240,11 +241,12 @@ func create(_ string) {
 
 func join(address string) {
 	if !joined {
-		if validateAddress(address) {
+		if addr, err := validateAddress(address); err == nil {
 			go startNode()
+			fmt.Println(addr, addr.hashed())
 			joined = true
 		} else {
-			fmt.Println(ansiWrap("bad address: <host>:<port>", ansiColors["red"]))
+			fmt.Println(ansiWrap(err.Error(), ansiColors["red"]))
 		}
 	} else {
 		fmt.Println(ansiWrap("can't join ring. already part of a ring", ansiColors["red"]))
@@ -273,28 +275,54 @@ func dumpAll(_ string) {
 
 func put(data string) {
 	if words := strings.Fields(data); len(words) == 2 {
-		key, value := words[0], words[1]
+		key, value := Key(words[0]), words[1]
 		fmt.Printf("%s => %s", key, value)
-		hash := hashString(key)
-		fmt.Println(KeyValue{hash, value})
+		kv := KeyValue{key, value}
+		address, err := currentNode.find(key)
+		if err != nil {
+			log.Printf("put: %v", err)
+		}
+
+		if err := call(address, "Node.Put", kv, &None{}); err != nil {
+			log.Printf("put: %v", err)
+		}
+		fmt.Println("successful put: ", kv)
 	} else {
 		fmt.Println("Too many values: <key> <value>")
 	}
 }
 
-func get(key string) {
-	if words := strings.Fields(key); len(words) == 1 {
-		fmt.Printf("%s => %s", key, currentNode.Data[key])
+func get(input string) {
+	if words := strings.Fields(input); len(words) == 1 {
+		key := Key(input)
+		fmt.Printf("Get item with key: %s", key)
+		address, err := currentNode.find(key)
+		if err != nil {
+			log.Printf("get finding: %v", err)
+		}
+		var value *string
+		if err := call(address, "Node.Get", key, value); err != nil {
+			log.Printf("get getting: %v", err)
+		}
+		fmt.Println(KeyValue{key, *value})
 	} else {
 		fmt.Println("Too many values: <key>")
 	}
 }
 
-func deleteKey(key string) {
-	if words := strings.Fields(key); len(words) == 1 {
-		fmt.Printf("Delete item {key: %s, value: %s}", key, currentNode.Data[key])
-		delete(currentNode.Data, key)
-		fmt.Printf("Successfully deleted item with key: %s", key)
+func deleteKey(input string) {
+	if words := strings.Fields(input); len(words) == 1 {
+		key := Key(input)
+		fmt.Printf("Delete item with key: %s", key)
+		address, err := currentNode.find(key)
+		if err != nil {
+			log.Printf("delete finding: %v", err)
+		}
+		var value *string
+		if err := call(address, "Node.Delete", key, value); err != nil {
+			log.Printf("delete deleting: %v", err)
+		}
+		fmt.Printf("Successfully deleted item with key: %s, and value %s", key, *value)
 	} else {
 		fmt.Println("Too many values: <key>")
 	}

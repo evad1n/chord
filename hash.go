@@ -6,18 +6,16 @@ import (
 	"math/big"
 )
 
-type (
-	Hashable interface {
-		Hashed() *big.Int
-	}
-)
-
-func (a Address) Hashed() *big.Int {
+func (a Address) hashed() *big.Int {
 	return hashString(string(a))
 }
 
-func (k Key) Hashed() *big.Int {
+func (k Key) hashed() *big.Int {
 	return hashString(string(k))
+}
+
+func (h Hash) String() string {
+	return fmt.Sprintf("%040x", h)[:8] + "..."
 }
 
 func hashString(elt string) *big.Int {
@@ -27,6 +25,5 @@ func hashString(elt string) *big.Int {
 }
 
 func (kv KeyValue) String() string {
-	hex := fmt.Sprintf("%040x", kv.Key)
-	return fmt.Sprintf("%s.. (%s)", hex[:8], string(kv.Value))
+	return fmt.Sprintf("%8s => %s", kv.Key, kv.Value)
 }
