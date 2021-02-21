@@ -16,19 +16,31 @@ const (
 
 // Start the RPC server
 func startNode() {
-	currentNode = &Node{
-		Address: Address(host + ":" + port),
-		Hash:    currentNode.Address.hashed(),
-		Data:    make(map[Key]string),
-	}
-	rpc.Register(currentNode)
+	actor := startActor()
+	rpc.Register(actor)
 	rpc.HandleHTTP()
-	l, e := net.Listen("tcp", ":"+port)
+	l, e := net.Listen("tcp", ":"+string(localPort))
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
 	// Run stabilize, fix fingers, and check predecessor in goroutines
 	go http.Serve(l, nil)
+}
+
+func startActor() NodeActor {
+	ch := make(chan handler)
+	currentNode := &Node{
+		Address: Address(localHost + ":" + string(localPort)),
+		Hash:    Address(localHost + ":" + string(localPort)).hashed(),
+		Data:    make(map[Key]string),
+	}
+	// Launch actor channel
+	go func() {
+		for evt := range ch {
+			evt(currentNode)
+		}
+	}()
+	return ch
 }
 
 // The RPC call
@@ -49,101 +61,152 @@ func call(address Address, method string, request interface{}, reply interface{}
 	return nil
 }
 
+// Blocks until actor executes
+func (a NodeActor) wait(f handler) {
+	done := make(chan None)
+	a <- func(n *Node) {
+		f(n)
+		done <- None{}
+	}
+	<-done
+}
+
 // Ping simply tests an RPC connection
-func (n *Node) Ping(request None, reply *bool) error {
-	*reply = true
+func (a NodeActor) Ping(request None, reply *bool) error {
+	a.wait(func(n *Node) {
+		*reply = true
+	})
 	return nil
 }
 
 // Find returns the address of the node responsible for the given key
-func (n *Node) find(key Key) (Address, error) {
-	hash := key.hashed()
-	result := &AddressResult{false, n.Address}
-	i := 0
-	// Check locally
-	currentNode.FindSuccesor(key, result)
-	for !result.Found && i < maxRequests {
-		if err := call(
-			result.Address,
-			"Node.FindSuccesor",
-			hash,
-			result,
-		); err != nil {
-			return n.Address, fmt.Errorf("find node: %v", err)
+func (a NodeActor) Find(
+	req struct {
+		key   Key
+		start Address
+	},
+	addr *Address,
+) error {
+	var err error
+	a.wait(func(n *Node) {
+		hash := req.key.hashed()
+		result := &AddressResult{false, n.Address}
+		i := 0
+		// Check locally
+		call(localAddress, "NodeActor.FindSuccessor", req.key, result)
+		for !result.Found && i < maxRequests {
+			if err := call(
+				result.Address,
+				"Node.FindSuccesor",
+				hash,
+				result,
+			); err != nil {
+				err = fmt.Errorf("find node: %v", err)
+				return
+			}
+			i++
 		}
-		i++
-	}
-	if result.Found {
-		return result.Address, nil
-	}
-	return n.Address, errors.New("could not find node responsible for the key")
+		if !result.Found {
+			err = errors.New("could not find node responsible for the key")
+		}
+	})
+	return err
 }
 
 // FindSuccesor finds the nearest successor node of they key with given id
-func (n *Node) FindSuccesor(key Key, result *AddressResult) error {
-	id := key.hashed()
-	// If it is one of our successors
-	if between(n.Hash, id, n.Successors[len(n.Successors)-1].hashed(), true) {
-		// Loop from nearest to farthest to find successor
-		for _, s := range n.Successors {
-			// Triggers on the nearest successor
-			if id.Cmp(s.hashed()) < 0 {
-				*result = AddressResult{true, s}
+func (a NodeActor) FindSuccesor(key Key, result *AddressResult) error {
+	a <- func(n *Node) {
+		id := key.hashed()
+		// If it is one of our successors
+		if between(n.Hash, id, n.Successors[len(n.Successors)-1].hashed(), true) {
+			// Loop from nearest to farthest to find successor
+			for _, s := range n.Successors {
+				// Triggers on the nearest successor
+				if id.Cmp(s.hashed()) < 0 {
+					*result = AddressResult{true, s}
+				}
 			}
+		} else {
+			// TODO: loop through fingers and call FindSuccessor until found
+			// call(n.Successors[0], "Node.FindSuccessor", id, address)
+			// Give address of last successor
+			*result = AddressResult{false, n.Successors[len(n.Successors)-1]}
 		}
-	} else {
-		// call(n.Successors[0], "Node.FindSuccessor", id, address)
-		// Give address of last successor
-		*result = AddressResult{false, n.Successors[len(n.Successors)-1]}
 	}
+
 	return nil
 }
 
-// Create creates a new chord ring with only this node in it
-func (n *Node) create() {
-
-}
-
 // Join joins an existing chord ring containing the node at the address specified
-func (n *Node) Join(address string, reply *None) error {
+func (a NodeActor) Join(address string, reply *None) error {
 	return nil
 }
 
 // Stabilize does something
-func (n *Node) Stabilize(request None, reply *None) error {
+func (a NodeActor) Stabilize(request None, reply *None) error {
 	return nil
 }
 
 // Notify notifies the nodes around
-func (n *Node) Notify(address string, reply *None) error {
+func (a NodeActor) Notify(address string, reply *None) error {
 	return nil
 }
 
 // FixFingers makes the finger table correct
-func (n *Node) FixFingers(request None, reply *None) error {
+func (a NodeActor) FixFingers(request None, reply *None) error {
 	return nil
 }
 
 // CheckPredecessor checks to see if the predecessor is correct
-func (n *Node) CheckPredecessor(request None, reply *None) error {
+func (a NodeActor) CheckPredecessor(request None, reply *None) error {
 	return nil
 }
 
 // Put adds an item to the database
-func (n *Node) Put(data *KeyValue, reply *None) error {
-	n.Data[data.Key] = data.Value
+func (a NodeActor) Put(
+	kv struct {
+		key   Key
+		value string
+	},
+	reply *None,
+) error {
+	a.wait(func(n *Node) {
+		n.Data[kv.key] = kv.value
+	})
 	return nil
 }
 
 // Get retrieves the value of a key in the database
-func (n *Node) Get(key Key, value *string) error {
-	*value = n.Data[key]
-	return nil
+func (a NodeActor) Get(key Key, value *string) error {
+	var err error
+	a.wait(func(n *Node) {
+		if val, exists := n.Data[key]; exists {
+			*value = val
+		} else {
+			err = errors.New("no such key")
+		}
+	})
+	return err
 }
 
 // Delete removes a key and its associated value from the database
-func (n *Node) Delete(key Key, value *string) error {
-	*value = n.Data[key]
-	delete(n.Data, key)
+func (a NodeActor) Delete(key Key, value *string) error {
+	var err error
+	a.wait(func(n *Node) {
+		if val, exists := n.Data[key]; exists {
+			*value = val
+			delete(n.Data, key)
+		} else {
+			err = errors.New("no such key")
+		}
+	})
+	return err
+}
+
+// Dump delivers all info on a node
+func (a NodeActor) Dump(_ None, node *Node) error {
+	a.wait(func(n *Node) {
+		node = n
+	})
 	return nil
 }

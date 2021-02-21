@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -14,13 +15,15 @@ type (
 		name        string
 		description string
 		usage       string
-		do          func(string)
+		do          func(string) error
 	}
 )
 
 var (
 	commands   map[string]command // Map of command aliases to commands
 	ansiColors map[string]string  // ANSI colors to code map
+
+	notJoinedMsg = "must join a ring before querying nodes"
 )
 
 // Initialize and populate lookup tables
@@ -103,7 +106,7 @@ func defaultCommands() {
 	}
 	commands["delete"] = command{
 		name:        "delete",
-		description: "Dlete a key and its associated value",
+		description: "Delete a key and its associated value",
 		usage:       "delete <key>",
 		do:          deleteKey,
 	}
@@ -143,7 +146,7 @@ func defaultCommands() {
 //////////////
 
 // Lists known aliases for commands
-func listCommands(_ string) {
+func listCommands(_ string) error {
 	var w strings.Builder
 
 	w.WriteString(fmt.Sprintf("+%s+\n", strings.Repeat("-", 98)))
@@ -193,110 +196,130 @@ func listCommands(_ string) {
 	))
 
 	fmt.Println(w.String())
+
+	return nil
 }
 
 // Quit gracefully and offload data to other nodes
-func quit(_ string) {
+func quit(_ string) error {
 	fmt.Println("Quitting...")
 	os.Exit(0)
+	return nil
 }
 
 // Change port to listen on, can't be done after joining
-func changePort(p string) {
+func changePort(p string) error {
 	if !joined {
-		if newPort, err := strconv.Atoi(p); err == nil {
-			fmt.Printf("Listening port changed from %s to %d\n", port, newPort)
-			port = p
-		} else {
-			fmt.Println(ansiWrap("bad port", ansiColors["red"]))
+		newPort, err := strconv.Atoi(p)
+		if err != nil {
+			return fmt.Errorf("bad port: %v", err)
 		}
+		fmt.Printf("Listening port changed from %s to %d\n", localPort, newPort)
+		localPort = newPort
 	} else {
-		fmt.Println(ansiWrap("can't change port. already listening", ansiColors["red"]))
+		return errors.New("can't change port. already listening")
 	}
+	return nil
 }
 
-func ping(address string) {
-	if addr, err := validateAddress((address)); err == nil {
+func ping(address string) error {
+	if joined {
+		addr, err := validateAddress((address))
+		if err != nil {
+			return fmt.Errorf("bad address: %v", err)
+		}
 		fmt.Printf("Attempting to ping %s...\n", address)
 		var success bool
-		call(addr, "Node.Ping", None{}, &success)
-		if success {
-			fmt.Println("Success")
-		} else {
-			fmt.Println(ansiWrap("Error", ansiColors["red"]))
+		if err := call(addr, "Node.Ping", None{}, &success); err != nil {
+			return fmt.Errorf("ping: %v", err)
 		}
+		fmt.Println("Success")
 	} else {
-		fmt.Printf(ansiWrap(err.Error(), ansiColors["red"]))
+		return errors.New(notJoinedMsg)
 	}
+	return nil
 }
 
-func create(_ string) {
+func create(_ string) error {
 	if !joined {
 		go startNode()
 		joined = true
 	} else {
-		fmt.Println(ansiWrap("can't create ring. already part of a ring", ansiColors["red"]))
+		return errors.New("can't create ring. already part of a ring")
 	}
+	return nil
 }
 
-func join(address string) {
+func join(address string) error {
 	if !joined {
-		if addr, err := validateAddress(address); err == nil {
-			go startNode()
-			fmt.Println(addr, addr.hashed())
-			joined = true
-		} else {
-			fmt.Println(ansiWrap(err.Error(), ansiColors["red"]))
+		addr, err := validateAddress(address)
+		if err != nil {
+			return fmt.Errorf("bad address: %v", err)
 		}
+		go startNode()
+		fmt.Println(addr, addr.hashed())
+		joined = true
 	} else {
-		fmt.Println(ansiWrap("can't join ring. already part of a ring", ansiColors["red"]))
+		return errors.New("can't join ring. already part of a ring")
 	}
+	return nil
 }
 
-func dump(_ string) {
-	if currentNode != nil {
-		fmt.Println(currentNode.toString())
+func dump(_ string) error {
+	if joined {
+		var n *Node
+		if err := call(localAddress, "NodeActor.Dump", None{}, n); err != nil {
+			return fmt.Errorf("getting dump info: %v", err)
+		}
+		fmt.Println(n)
 	} else {
-		fmt.Println("Node does not exist yet")
+		return errors.New(notJoinedMsg)
 	}
+	return nil
 }
 
-func dumpKey(key string) {
-
+// Dumps info on the node responsible for a key
+func dumpKey(key string) error {
+	return nil
 }
 
-func dumpAddress(address string) {
-
+// Dumps info on the node at the requested address
+func dumpAddress(address string) error {
+	return nil
 }
 
-func dumpAll(_ string) {
-
+// Dumps info on each node in the current ring
+func dumpAll(_ string) error {
+	return nil
 }
 
-func put(data string) {
+func put(data string) error {
 	if words := strings.Fields(data); len(words) == 2 {
 		key, value := Key(words[0]), words[1]
 		fmt.Printf("%s => %s", key, value)
 		kv := KeyValue{key, value}
-		address, err := currentNode.find(key)
+		var address *Address
+		err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
 		if err != nil {
-			log.Printf("put: %v", err)
+			return fmt.Errorf("put: %v", err)
 		}
 
 		if err := call(address, "Node.Put", kv, &None{}); err != nil {
-			log.Printf("put: %v", err)
+			return fmt.Errorf("put: %v", err)
 		}
 		fmt.Println("successful put: ", kv)
 	} else {
-		fmt.Println("Too many values: <key> <value>")
+		return errors.New("too many values: <key> <value>")
 	}
+	return nil
 }
 
-func get(input string) {
+func get(input string) error {
 	if words := strings.Fields(input); len(words) == 1 {
 		key := Key(input)
 		fmt.Printf("Get item with key: %s", key)
-		address, err := currentNode.find(key)
+		var address *Address
+		err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
 		if err != nil {
 			log.Printf("get finding: %v", err)
 		}
@@ -308,13 +331,15 @@ func get(input string) {
 	} else {
 		fmt.Println("Too many values: <key>")
 	}
+	return nil
 }
 
-func deleteKey(input string) {
+func deleteKey(input string) error {
 	if words := strings.Fields(input); len(words) == 1 {
 		key := Key(input)
 		fmt.Printf("Delete item with key: %s", key)
-		address, err := currentNode.find(key)
+		var address *Address
+		err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
 		if err != nil {
 			log.Printf("delete finding: %v", err)
 		}
@@ -326,8 +351,9 @@ func deleteKey(input string) {
 	} else {
 		fmt.Println("Too many values: <key>")
 	}
+	return nil
 }
 
-func putRandom(count string) {
-
+func putRandom(count string) error {
+	return nil
 }

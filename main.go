@@ -7,19 +7,19 @@ import (
 	"strings"
 )
 
+// FIX: should local node be stored or called from RPC?
+
 var (
-	host string
-	port = "3410" // Port to listen on
-
-	currentNode *Node // The node running in this instance
-
-	joined = false // Whether this node is part of a ring yet
+	localHost    string
+	localPort    = 3410  // Port to listen on
+	localAddress Address // The full address which is set upon joining
+	joined       = false // Whether this node is part of a ring yet
 )
 
 func main() {
-	host = getLocalAddress()
-	fmt.Printf("Current address: %s\n", host)
-	fmt.Printf("Current port: %s\n", port)
+	localHost = getLocalAddress()
+	fmt.Printf("Current address: %s\n", localHost)
+	fmt.Printf("Current port: %s\n", localPort)
 
 	createMaps()
 	defaultCommands()
@@ -28,7 +28,7 @@ func main() {
 }
 
 func commandLoop() {
-	scanner := bufio.NewScanner(os.Stdout)
+	scanner := bufio.NewScanner(os.Stdin)
 
 	fmt.Print(">>> ")
 	for scanner.Scan() {
@@ -37,7 +37,9 @@ func commandLoop() {
 			// Check if cmd exists
 			if cmd, exists := commands[strings.ToLower(words[0])]; exists {
 				params := strings.Join(words[1:], " ")
-				cmd.do(params)
+				if err := cmd.do(params); err != nil {
+					fmt.Println(ansiWrap(err.Error(), ansiColors["red"]))
+				}
 			} else {
 				fmt.Println(ansiWrap("Unrecognized command!", ansiColors["red"]))
 			}

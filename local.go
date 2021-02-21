@@ -6,14 +6,15 @@ import (
 	"strings"
 )
 
-func (n Node) toString() string {
+// Stringer interface for Node dump
+func (n Node) String() string {
 	var w strings.Builder
 	w.WriteString("DUMP: Node info\n")
 	w.WriteString(fmt.Sprintf("Address: %s\n", n.Address))
 
 	w.WriteString("Data items:")
-	for key, value := range currentNode.Data {
-		w.WriteString(fmt.Sprintf("%s => %s", key, value))
+	for key, value := range n.Data {
+		w.WriteString(fmt.Sprint(KeyValue{key, value}))
 	}
 
 	return w.String()

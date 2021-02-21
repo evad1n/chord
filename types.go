@@ -6,6 +6,11 @@ import (
 )
 
 type (
+	// NodeActor represents an RPC actor for the Node client
+	NodeActor chan<- handler
+	// Some operation on a Node
+	handler func(*Node)
+
 	// Node is a part of the chord ring
 	Node struct {
 		Address     Address
@@ -33,6 +38,8 @@ type (
 		*big.Int
 	}
 
+	// RPC request/reply structs
+
 	// KeyValue is a data item to be stored
 	KeyValue struct {
 		Key   Key
@@ -43,6 +50,12 @@ type (
 	AddressResult struct {
 		Found   bool // Whether the returned address is a final or intermediate step
 		Address Address
+	}
+
+	// NodeInfo is the dump data for a node
+	NodeInfo struct {
+		Address Address
+		Data    map[Key]string
 	}
 
 	// None is a null value
