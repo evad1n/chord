@@ -33,10 +33,6 @@ type (
 	Address string
 	// Key represents a map key, which will be hashed
 	Key string
-	// Hash is just a wrapper for a *big.Int
-	Hash struct {
-		*big.Int
-	}
 
 	// RPC request/reply structs
 

@@ -3,23 +3,25 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 )
 
-// FIX: should local node be stored or called from RPC?
-
 var (
-	localHost    string
-	localPort    = 3410  // Port to listen on
-	localAddress Address // The full address which is set upon joining
-	joined       = false // Whether this node is part of a ring yet
+	localHost string
+	localPort = 3410 // Port to listen on
+	localNode *Node
+	joined    = false // Whether this node is part of a ring yet
 )
 
 func main() {
+	// DEBUGGING
+	log.SetFlags(log.Lshortfile)
+
 	localHost = getLocalAddress()
 	fmt.Printf("Current address: %s\n", localHost)
-	fmt.Printf("Current port: %s\n", localPort)
+	fmt.Printf("Current port: %d\n", localPort)
 
 	createMaps()
 	defaultCommands()

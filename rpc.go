@@ -15,32 +15,44 @@ const (
 )
 
 // Start the RPC server
-func startNode() {
+func startNode() error {
 	actor := startActor()
 	rpc.Register(actor)
 	rpc.HandleHTTP()
-	l, e := net.Listen("tcp", ":"+string(localPort))
-	if e != nil {
-		log.Fatal("listen error:", e)
+	listener, err := net.Listen("tcp", ":"+fmt.Sprint(localPort))
+	if err != nil {
+		return fmt.Errorf("listen error: %v", err)
 	}
+	// TODO:
 	// Run stabilize, fix fingers, and check predecessor in goroutines
-	go http.Serve(l, nil)
+	go http.Serve(listener, nil)
+	return nil
 }
 
 func startActor() NodeActor {
 	ch := make(chan handler)
-	currentNode := &Node{
-		Address: Address(localHost + ":" + string(localPort)),
-		Hash:    Address(localHost + ":" + string(localPort)).hashed(),
+	localNode = &Node{
+		Address: Address(localHost + ":" + fmt.Sprint(localPort)),
+		Hash:    Address(localHost + ":" + fmt.Sprint(localPort)).hashed(),
 		Data:    make(map[Key]string),
 	}
 	// Launch actor channel
 	go func() {
 		for evt := range ch {
-			evt(currentNode)
+			evt(localNode)
 		}
 	}()
 	return ch
+}
+
+// Blocks until actor executes
+func (a NodeActor) wait(f handler) {
+	done := make(chan None)
+	a <- func(n *Node) {
+		f(n)
+		done <- None{}
+	}
+	<-done
 }
 
 // The RPC call
@@ -61,56 +73,12 @@ func call(address Address, method string, request interface{}, reply interface{}
 	return nil
 }
 
-// Blocks until actor executes
-func (a NodeActor) wait(f handler) {
-	done := make(chan None)
-	a <- func(n *Node) {
-		f(n)
-		done <- None{}
-	}
-	<-done
-}
-
 // Ping simply tests an RPC connection
 func (a NodeActor) Ping(request None, reply *bool) error {
 	a.wait(func(n *Node) {
 		*reply = true
 	})
 	return nil
-}
-
-// Find returns the address of the node responsible for the given key
-func (a NodeActor) Find(
-	req struct {
-		key   Key
-		start Address
-	},
-	addr *Address,
-) error {
-	var err error
-	a.wait(func(n *Node) {
-		hash := req.key.hashed()
-		result := &AddressResult{false, n.Address}
-		i := 0
-		// Check locally
-		call(localAddress, "NodeActor.FindSuccessor", req.key, result)
-		for !result.Found && i < maxRequests {
-			if err := call(
-				result.Address,
-				"Node.FindSuccesor",
-				hash,
-				result,
-			); err != nil {
-				err = fmt.Errorf("find node: %v", err)
-				return
-			}
-			i++
-		}
-		if !result.Found {
-			err = errors.New("could not find node responsible for the key")
-		}
-	})
-	return err
 }
 
 // FindSuccesor finds the nearest successor node of they key with given id
@@ -142,18 +110,8 @@ func (a NodeActor) Join(address string, reply *None) error {
 	return nil
 }
 
-// Stabilize does something
-func (a NodeActor) Stabilize(request None, reply *None) error {
-	return nil
-}
-
 // Notify notifies the nodes around
 func (a NodeActor) Notify(address string, reply *None) error {
-	return nil
-}
-
-// FixFingers makes the finger table correct
-func (a NodeActor) FixFingers(request None, reply *None) error {
 	return nil
 }
 
@@ -163,15 +121,9 @@ func (a NodeActor) CheckPredecessor(request None, reply *None) error {
 }
 
 // Put adds an item to the database
-func (a NodeActor) Put(
-	kv struct {
-		key   Key
-		value string
-	},
-	reply *None,
-) error {
+func (a NodeActor) Put(kv KeyValue, reply *None) error {
 	a.wait(func(n *Node) {
-		n.Data[kv.key] = kv.value
+		n.Data[kv.Key] = kv.Value
 	})
 	return nil
 }

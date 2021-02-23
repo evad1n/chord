@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strconv"
@@ -214,7 +213,7 @@ func changePort(p string) error {
 		if err != nil {
 			return fmt.Errorf("bad port: %v", err)
 		}
-		fmt.Printf("Listening port changed from %s to %d\n", localPort, newPort)
+		fmt.Printf("Listening port changed from %d to %d\n", localPort, newPort)
 		localPort = newPort
 	} else {
 		return errors.New("can't change port. already listening")
@@ -230,7 +229,7 @@ func ping(address string) error {
 		}
 		fmt.Printf("Attempting to ping %s...\n", address)
 		var success bool
-		if err := call(addr, "Node.Ping", None{}, &success); err != nil {
+		if err := call(addr, "NodeActor.Ping", None{}, &success); err != nil {
 			return fmt.Errorf("ping: %v", err)
 		}
 		fmt.Println("Success")
@@ -242,7 +241,9 @@ func ping(address string) error {
 
 func create(_ string) error {
 	if !joined {
-		go startNode()
+		if err := startNode(); err != nil {
+			return fmt.Errorf("create error: %v", err)
+		}
 		joined = true
 	} else {
 		return errors.New("can't create ring. already part of a ring")
@@ -256,9 +257,11 @@ func join(address string) error {
 		if err != nil {
 			return fmt.Errorf("bad address: %v", err)
 		}
-		go startNode()
-		fmt.Println(addr, addr.hashed())
+		if err := startNode(); err != nil {
+			return fmt.Errorf("create error: %v", err)
+		}
 		joined = true
+		fmt.Println(addr, addr.hashed())
 	} else {
 		return errors.New("can't join ring. already part of a ring")
 	}
@@ -267,11 +270,7 @@ func join(address string) error {
 
 func dump(_ string) error {
 	if joined {
-		var n *Node
-		if err := call(localAddress, "NodeActor.Dump", None{}, n); err != nil {
-			return fmt.Errorf("getting dump info: %v", err)
-		}
-		fmt.Println(n)
+		fmt.Println(localNode)
 	} else {
 		return errors.New(notJoinedMsg)
 	}
@@ -294,17 +293,21 @@ func dumpAll(_ string) error {
 }
 
 func put(data string) error {
-	if words := strings.Fields(data); len(words) == 2 {
+	if words := strings.Fields(data); len(words) == 3 {
 		key, value := Key(words[0]), words[1]
-		fmt.Printf("%s => %s", key, value)
-		kv := KeyValue{key, value}
-		var address *Address
-		err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
+		address, err := validateAddress(words[2])
 		if err != nil {
-			return fmt.Errorf("put: %v", err)
+			return fmt.Errorf("bad address: %v", err)
 		}
+		fmt.Printf("Put: %s => %s\n", key, value)
+		kv := KeyValue{key, value}
+		// var address *Address
+		// err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
+		// if err != nil {
+		// 	return fmt.Errorf("put: %v", err)
+		// }
 
-		if err := call(address, "Node.Put", kv, &None{}); err != nil {
+		if err := call(address, "NodeActor.Put", kv, &None{}); err != nil {
 			return fmt.Errorf("put: %v", err)
 		}
 		fmt.Println("successful put: ", kv)
@@ -315,19 +318,22 @@ func put(data string) error {
 }
 
 func get(input string) error {
-	if words := strings.Fields(input); len(words) == 1 {
-		key := Key(input)
-		fmt.Printf("Get item with key: %s", key)
-		var address *Address
-		err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
+	if words := strings.Fields(input); len(words) == 2 {
+		key := Key(words[0])
+		address, err := validateAddress(words[1])
 		if err != nil {
-			log.Printf("get finding: %v", err)
+			return fmt.Errorf("bad address: %v", err)
 		}
-		var value *string
-		if err := call(address, "Node.Get", key, value); err != nil {
-			log.Printf("get getting: %v", err)
+		fmt.Printf("Get item with key: %s\n", key)
+		// err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
+		// if err != nil {
+		// 	fmt.Errorf("get finding: %v", err)
+		// }
+		var value string
+		if err := call(address, "NodeActor.Get", key, &value); err != nil {
+			return fmt.Errorf("get getting: %v", err)
 		}
-		fmt.Println(KeyValue{key, *value})
+		fmt.Println(KeyValue{key, value})
 	} else {
 		fmt.Println("Too many values: <key>")
 	}
@@ -335,19 +341,23 @@ func get(input string) error {
 }
 
 func deleteKey(input string) error {
-	if words := strings.Fields(input); len(words) == 1 {
-		key := Key(input)
-		fmt.Printf("Delete item with key: %s", key)
-		var address *Address
-		err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
+	if words := strings.Fields(input); len(words) == 2 {
+		key := Key(words[0])
+		address, err := validateAddress(words[1])
 		if err != nil {
-			log.Printf("delete finding: %v", err)
+			return fmt.Errorf("bad address: %v", err)
 		}
-		var value *string
-		if err := call(address, "Node.Delete", key, value); err != nil {
-			log.Printf("delete deleting: %v", err)
+		fmt.Printf("Delete item with key: %s", key)
+		// var address *Address
+		// err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
+		// if err != nil {
+		// 	fmt.Errorf("delete finding: %v", err)
+		// }
+		var value string
+		if err := call(address, "NodeActor.Delete", key, &value); err != nil {
+			return fmt.Errorf("delete deleting: %v", err)
 		}
-		fmt.Printf("Successfully deleted item with key: %s, and value %s", key, *value)
+		fmt.Printf("Successfully deleted item with key: %s, and value %s", key, value)
 	} else {
 		fmt.Println("Too many values: <key>")
 	}
