@@ -14,9 +14,9 @@ type (
 	// Node is a part of the chord ring
 	Node struct {
 		Address     Address
-		Hash        *big.Int
-		Successors  [numSuccessors]Address
-		Predecessor Address
+		Hash        *big.Int // The hash of the address
+		Successors  []Address
+		Predecessor *Address
 		Fingers     [160]Address   // The finger table pointing to other nodes on the ring
 		Data        map[Key]string // The data items stored at this node
 	}
@@ -48,10 +48,10 @@ type (
 		Address Address
 	}
 
-	// NodeInfo is the dump data for a node
-	NodeInfo struct {
-		Address Address
-		Data    map[Key]string
+	// NodeLink contains the predecessor and successor links for a node
+	NodeLink struct {
+		Predecessor *Address
+		Successors  []Address
 	}
 
 	// None is a null value

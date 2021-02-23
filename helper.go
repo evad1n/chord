@@ -46,3 +46,7 @@ func validateAddress(address string) (Address, error) {
 	}
 	return Address(address), errors.New("invalid address format: <host>:<port>")
 }
+
+func (kv KeyValue) String() string {
+	return fmt.Sprintf("%20s => %s\n", kv.Key, kv.Value)
+}

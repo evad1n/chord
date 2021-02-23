@@ -4,42 +4,36 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"net/rpc"
 )
 
 const (
-	numSuccessors = 5
-	maxRequests   = 32 // Maximum number of requests a single lookup can generate
+	maxRequests = 32 // Maximum number of requests a single lookup can generate
 )
 
-// Start the RPC server
-func startNode() error {
-	actor := startActor()
-	rpc.Register(actor)
-	rpc.HandleHTTP()
+// Start the RPC server on the node
+func (n *Node) startNode() error {
+	// Make sure port isn't in use frst
 	listener, err := net.Listen("tcp", ":"+fmt.Sprint(localPort))
 	if err != nil {
 		return fmt.Errorf("listen error: %v", err)
 	}
-	// TODO:
-	// Run stabilize, fix fingers, and check predecessor in goroutines
+	actor := n.startActor()
+	rpc.Register(actor)
+	rpc.HandleHTTP()
 	go http.Serve(listener, nil)
 	return nil
 }
 
-func startActor() NodeActor {
+func (n *Node) startActor() NodeActor {
 	ch := make(chan handler)
-	localNode = &Node{
-		Address: Address(localHost + ":" + fmt.Sprint(localPort)),
-		Hash:    Address(localHost + ":" + fmt.Sprint(localPort)).hashed(),
-		Data:    make(map[Key]string),
-	}
 	// Launch actor channel
 	go func() {
 		for evt := range ch {
-			evt(localNode)
+			evt(n)
 		}
 	}()
 	return ch
@@ -81,47 +75,48 @@ func (a NodeActor) Ping(request None, reply *bool) error {
 	return nil
 }
 
-// FindSuccesor finds the nearest successor node of they key with given id
-func (a NodeActor) FindSuccesor(key Key, result *AddressResult) error {
-	a <- func(n *Node) {
-		id := key.hashed()
-		// If it is one of our successors
-		if between(n.Hash, id, n.Successors[len(n.Successors)-1].hashed(), true) {
-			// Loop from nearest to farthest to find successor
-			for _, s := range n.Successors {
-				// Triggers on the nearest successor
-				if id.Cmp(s.hashed()) < 0 {
-					*result = AddressResult{true, s}
-				}
+// FindSuccessor finds the nearest successor node for the given id
+func (a NodeActor) FindSuccessor(id *big.Int, result *AddressResult) error {
+	a.wait(func(n *Node) {
+		// If it is between us and our successor
+		if between(n.Hash, id, n.Successors[0].hashed(), true) {
+			*result = AddressResult{
+				Found:   true,
+				Address: n.Successors[0],
 			}
 		} else {
-			// TODO: loop through fingers and call FindSuccessor until found
-			// call(n.Successors[0], "Node.FindSuccessor", id, address)
-			// Give address of last successor
-			*result = AddressResult{false, n.Successors[len(n.Successors)-1]}
+			*result = AddressResult{
+				Found:   false,
+				Address: n.Successors[0],
+			}
 		}
-	}
-
+	})
 	return nil
 }
 
-// Join joins an existing chord ring containing the node at the address specified
-func (a NodeActor) Join(address string, reply *None) error {
+// Notify signals a node that another node thinks it should be its predecessor
+func (a NodeActor) Notify(address Address, _ *None) error {
+	a.wait(func(n *Node) {
+		if n.Predecessor == nil || between(n.Predecessor.hashed(), address.hashed(), n.Hash, false) {
+			n.Predecessor = &address
+		}
+	})
 	return nil
 }
 
-// Notify notifies the nodes around
-func (a NodeActor) Notify(address string, reply *None) error {
-	return nil
-}
-
-// CheckPredecessor checks to see if the predecessor is correct
-func (a NodeActor) CheckPredecessor(request None, reply *None) error {
+// GetNodeLinks returns the successors and predecessor of a node
+func (a NodeActor) GetNodeLinks(request None, links *NodeLink) error {
+	a.wait(func(n *Node) {
+		*links = NodeLink{
+			Predecessor: n.Predecessor,
+			Successors:  n.Successors,
+		}
+	})
 	return nil
 }
 
 // Put adds an item to the database
-func (a NodeActor) Put(kv KeyValue, reply *None) error {
+func (a NodeActor) Put(kv KeyValue, _ *None) error {
 	a.wait(func(n *Node) {
 		n.Data[kv.Key] = kv.Value
 	})
@@ -155,10 +150,28 @@ func (a NodeActor) Delete(key Key, value *string) error {
 	return err
 }
 
-// Dump delivers all info on a node
-func (a NodeActor) Dump(_ None, node *Node) error {
+// PutAll adds all key/value pairs in a map to the local data
+func (a NodeActor) PutAll(data map[Key]string, _ *None) error {
+	var err error
 	a.wait(func(n *Node) {
-		node = n
+
+	})
+	return err
+}
+
+// GetAll gathers all key/value pairs from
+func (a NodeActor) GetAll(newAddress Address, data *map[Key]string) error {
+	var err error
+	a.wait(func(n *Node) {
+
+	})
+	return err
+}
+
+// Dump delivers all info on a node
+func (a NodeActor) Dump(_ None, dump *string) error {
+	a.wait(func(n *Node) {
+		*dump = n.String()
 	})
 	return nil
 }

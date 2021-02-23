@@ -10,8 +10,8 @@ import (
 
 var (
 	localHost string
-	localPort = 3410 // Port to listen on
-	localNode *Node
+	localPort = 3410  // Port to listen on
+	localNode *Node   // The local node, only set after join/creation
 	joined    = false // Whether this node is part of a ring yet
 )
 
@@ -39,8 +39,14 @@ func commandLoop() {
 			// Check if cmd exists
 			if cmd, exists := commands[strings.ToLower(words[0])]; exists {
 				params := strings.Join(words[1:], " ")
-				if err := cmd.do(params); err != nil {
-					fmt.Println(ansiWrap(err.Error(), ansiColors["red"]))
+				switch {
+				case !joined && cmd.joinRequired:
+					fmt.Println(ansiWrap("must join a ring for this command", ansiColors["red"]))
+					break
+				default:
+					if err := cmd.do(params); err != nil {
+						fmt.Println(ansiWrap(err.Error(), ansiColors["red"]))
+					}
 				}
 			} else {
 				fmt.Println(ansiWrap("Unrecognized command!", ansiColors["red"]))

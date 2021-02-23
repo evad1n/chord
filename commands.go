@@ -11,18 +11,17 @@ import (
 
 type (
 	command struct {
-		name        string
-		description string
-		usage       string
-		do          func(string) error
+		name         string
+		description  string
+		usage        string
+		do           func(string) error
+		joinRequired bool // Whether the command requires a ring to function
 	}
 )
 
 var (
 	commands   map[string]command // Map of command aliases to commands
 	ansiColors map[string]string  // ANSI colors to code map
-
-	notJoinedMsg = "must join a ring before querying nodes"
 )
 
 // Initialize and populate lookup tables
@@ -92,40 +91,46 @@ func defaultCommands() {
 		do:          join,
 	}
 	commands["put"] = command{
-		name:        "put",
-		description: "Add a key/value pair to the database",
-		usage:       "put <key> <value>",
-		do:          put,
+		name:         "put",
+		description:  "Add a key/value pair to the database",
+		usage:        "put <key> <value>",
+		do:           put,
+		joinRequired: true,
 	}
 	commands["get"] = command{
-		name:        "get",
-		description: "Get the value of a key",
-		usage:       "get <key>",
-		do:          get,
+		name:         "get",
+		description:  "Get the value of a key",
+		usage:        "get <key>",
+		do:           get,
+		joinRequired: true,
 	}
 	commands["delete"] = command{
-		name:        "delete",
-		description: "Delete a key and its associated value",
-		usage:       "delete <key>",
-		do:          deleteKey,
+		name:         "delete",
+		description:  "Delete a key and its associated value",
+		usage:        "delete <key>",
+		do:           deleteKey,
+		joinRequired: true,
 	}
 	commands["putrandom"] = command{
-		name:        "putrandom",
-		description: "Add random data items to the database",
-		usage:       "putrandom <num_items>",
-		do:          putRandom,
+		name:         "putrandom",
+		description:  "Add random data items to the database",
+		usage:        "putrandom <num_items>",
+		do:           putRandom,
+		joinRequired: true,
 	}
 	// Information/debugging
 	commands["dump"] = command{
-		name:        "dump",
-		description: "Dumps current node information",
-		do:          dump,
+		name:         "dump",
+		description:  "Dumps current node information",
+		do:           dump,
+		joinRequired: true,
 	}
 	commands["dumpkey"] = command{
-		name:        "dumpkey",
-		description: "Dumps info on the node responsible for a key",
-		usage:       "dumpkey <key>",
-		do:          dumpKey,
+		name:         "dumpkey",
+		description:  "Dumps info on the node responsible for a key",
+		usage:        "dumpkey <key>",
+		do:           dumpKey,
+		joinRequired: true,
 	}
 	commands["dumpaddr"] = command{
 		name:        "dumpaddr",
@@ -134,9 +139,10 @@ func defaultCommands() {
 		do:          dumpAddress,
 	}
 	commands["dumpall"] = command{
-		name:        "dumpall",
-		description: "Dumps info on each node in the current ring",
-		do:          dumpAll,
+		name:         "dumpall",
+		description:  "Dumps info on each node in the current ring",
+		do:           dumpAll,
+		joinRequired: true,
 	}
 }
 
@@ -221,29 +227,27 @@ func changePort(p string) error {
 	return nil
 }
 
-func ping(address string) error {
-	if joined {
-		addr, err := validateAddress((address))
-		if err != nil {
-			return fmt.Errorf("bad address: %v", err)
-		}
-		fmt.Printf("Attempting to ping %s...\n", address)
-		var success bool
-		if err := call(addr, "NodeActor.Ping", None{}, &success); err != nil {
-			return fmt.Errorf("ping: %v", err)
-		}
-		fmt.Println("Success")
-	} else {
-		return errors.New(notJoinedMsg)
+func ping(inputAddress string) error {
+	address, err := validateAddress((inputAddress))
+	if err != nil {
+		return fmt.Errorf("bad address: %v", err)
 	}
+	fmt.Printf("Attempting to ping %s...\n", address)
+	var success bool
+	if err := call(address, "NodeActor.Ping", None{}, &success); err != nil {
+		return fmt.Errorf("ping: %v", err)
+	}
+	fmt.Println("Success")
 	return nil
 }
 
 func create(_ string) error {
 	if !joined {
-		if err := startNode(); err != nil {
-			return fmt.Errorf("create error: %v", err)
+		var err error
+		if localNode, err = createRing(); err != nil {
+			return fmt.Errorf("creating ring: %v", err)
 		}
+		// Successful creation of new ring
 		joined = true
 	} else {
 		return errors.New("can't create ring. already part of a ring")
@@ -251,29 +255,26 @@ func create(_ string) error {
 	return nil
 }
 
-func join(address string) error {
+func join(inputAddress string) error {
 	if !joined {
-		addr, err := validateAddress(address)
+		address, err := validateAddress(inputAddress)
 		if err != nil {
 			return fmt.Errorf("bad address: %v", err)
 		}
-		if err := startNode(); err != nil {
-			return fmt.Errorf("create error: %v", err)
+		if localNode, err = joinRing(address); err != nil {
+			return fmt.Errorf("joining ring: %v", err)
 		}
+		// Successful join
 		joined = true
-		fmt.Println(addr, addr.hashed())
 	} else {
 		return errors.New("can't join ring. already part of a ring")
 	}
 	return nil
 }
 
+// Dump info on local node
 func dump(_ string) error {
-	if joined {
-		fmt.Println(localNode)
-	} else {
-		return errors.New(notJoinedMsg)
-	}
+	fmt.Println(localNode)
 	return nil
 }
 
@@ -283,7 +284,16 @@ func dumpKey(key string) error {
 }
 
 // Dumps info on the node at the requested address
-func dumpAddress(address string) error {
+func dumpAddress(inputAddress string) error {
+	address, err := validateAddress(inputAddress)
+	if err != nil {
+		return fmt.Errorf("bad address: %v", err)
+	}
+	var dump string
+	if err := call(address, "NodeActor.Dump", None{}, &dump); err != nil {
+		return fmt.Errorf("getting dump info: %v", err)
+	}
+	fmt.Println(dump)
 	return nil
 }
 
@@ -292,23 +302,19 @@ func dumpAll(_ string) error {
 	return nil
 }
 
-func put(data string) error {
-	if words := strings.Fields(data); len(words) == 3 {
+func put(input string) error {
+	if words := strings.Fields(input); len(words) == 2 {
 		key, value := Key(words[0]), words[1]
-		address, err := validateAddress(words[2])
-		if err != nil {
-			return fmt.Errorf("bad address: %v", err)
-		}
 		fmt.Printf("Put: %s => %s\n", key, value)
 		kv := KeyValue{key, value}
-		// var address *Address
-		// err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
-		// if err != nil {
-		// 	return fmt.Errorf("put: %v", err)
-		// }
-
+		// Find address to put at
+		address, err := find(key.hashed(), localNode.Address)
+		if err != nil {
+			return fmt.Errorf("finding correct node to put at: %v", err)
+		}
+		// Now put it there
 		if err := call(address, "NodeActor.Put", kv, &None{}); err != nil {
-			return fmt.Errorf("put: %v", err)
+			return fmt.Errorf("putting: %v", err)
 		}
 		fmt.Println("successful put: ", kv)
 	} else {
@@ -318,20 +324,18 @@ func put(data string) error {
 }
 
 func get(input string) error {
-	if words := strings.Fields(input); len(words) == 2 {
+	if words := strings.Fields(input); len(words) == 1 {
 		key := Key(words[0])
-		address, err := validateAddress(words[1])
-		if err != nil {
-			return fmt.Errorf("bad address: %v", err)
-		}
 		fmt.Printf("Get item with key: %s\n", key)
-		// err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
-		// if err != nil {
-		// 	fmt.Errorf("get finding: %v", err)
-		// }
+		// Find address to get from
+		address, err := find(key.hashed(), localNode.Address)
+		if err != nil {
+			return fmt.Errorf("finding correct node to get from: %v", err)
+		}
+		// Now get the value
 		var value string
 		if err := call(address, "NodeActor.Get", key, &value); err != nil {
-			return fmt.Errorf("get getting: %v", err)
+			return fmt.Errorf("getting: %v", err)
 		}
 		fmt.Println(KeyValue{key, value})
 	} else {
@@ -341,21 +345,18 @@ func get(input string) error {
 }
 
 func deleteKey(input string) error {
-	if words := strings.Fields(input); len(words) == 2 {
+	if words := strings.Fields(input); len(words) == 1 {
 		key := Key(words[0])
-		address, err := validateAddress(words[1])
-		if err != nil {
-			return fmt.Errorf("bad address: %v", err)
-		}
 		fmt.Printf("Delete item with key: %s", key)
-		// var address *Address
-		// err := call(localAddress, "NodeActor.Find", struct{key, localAddress}, address)
-		// if err != nil {
-		// 	fmt.Errorf("delete finding: %v", err)
-		// }
+		// Find address to delete from
+		address, err := find(key.hashed(), localNode.Address)
+		if err != nil {
+			return fmt.Errorf("finding correct node to delete from: %v", err)
+		}
+		// Now delete the value
 		var value string
 		if err := call(address, "NodeActor.Delete", key, &value); err != nil {
-			return fmt.Errorf("delete deleting: %v", err)
+			return fmt.Errorf("deleting: %v", err)
 		}
 		fmt.Printf("Successfully deleted item with key: %s, and value %s", key, value)
 	} else {
