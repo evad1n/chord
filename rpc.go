@@ -68,14 +68,14 @@ func call(address Address, method string, request interface{}, reply interface{}
 }
 
 // Ping simply tests an RPC connection
-func (a NodeActor) Ping(request None, reply *bool) error {
+func (a NodeActor) Ping(_ None, reply *bool) error {
 	a.wait(func(n *Node) {
 		*reply = true
 	})
 	return nil
 }
 
-// FindSuccessor finds the nearest successor node for the given id
+// FindSuccessor asks the node to find the successor of an id, or a better node to continue the search with
 func (a NodeActor) FindSuccessor(id *big.Int, result *AddressResult) error {
 	a.wait(func(n *Node) {
 		// If it is between us and our successor
@@ -87,7 +87,7 @@ func (a NodeActor) FindSuccessor(id *big.Int, result *AddressResult) error {
 		} else {
 			*result = AddressResult{
 				Found:   false,
-				Address: n.Successors[0],
+				Address: n.closestPrecedingNode(id),
 			}
 		}
 	})
@@ -154,24 +154,35 @@ func (a NodeActor) Delete(key Key, value *string) error {
 func (a NodeActor) PutAll(data map[Key]string, _ *None) error {
 	var err error
 	a.wait(func(n *Node) {
-
+		for key, value := range data {
+			n.Data[key] = value
+		}
 	})
 	return err
 }
 
-// GetAll gathers all key/value pairs from
+// GetAll gathers all key/value pairs from a node and transfers them to a newly joined node that they belong to
 func (a NodeActor) GetAll(newAddress Address, data *map[Key]string) error {
 	var err error
+	transfer := make(map[Key]string)
 	a.wait(func(n *Node) {
-
+		for key, value := range n.Data {
+			if between(newAddress.hashed(), key.hashed(), n.Successors[0].hashed(), true) {
+				transfer[key] = value
+				delete(n.Data, key)
+			}
+		}
 	})
 	return err
 }
 
 // Dump delivers all info on a node
-func (a NodeActor) Dump(_ None, dump *string) error {
+func (a NodeActor) Dump(_ None, dumpReturn *DumpReturn) error {
 	a.wait(func(n *Node) {
-		*dump = n.String()
+		*dumpReturn = DumpReturn{
+			Dump:      n.String(),
+			Successor: n.Successors[0],
+		}
 	})
 	return nil
 }

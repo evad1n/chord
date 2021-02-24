@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strconv"
@@ -11,7 +13,6 @@ import (
 
 type (
 	command struct {
-		name         string
 		description  string
 		usage        string
 		do           func(string) error
@@ -22,6 +23,14 @@ type (
 var (
 	commands   map[string]command // Map of command aliases to commands
 	ansiColors map[string]string  // ANSI colors to code map
+)
+
+// Displaying command widths
+var (
+	nameWidth        int
+	descriptionWidth int
+	usageWidth       int
+	totalWidth       int
 )
 
 // Initialize and populate lookup tables
@@ -58,61 +67,51 @@ func defaultCommands() {
 	commands = make(map[string]command)
 
 	commands["help"] = command{
-		name:        "help",
 		description: "List all commands and descriptions",
 		do:          listCommands,
 	}
 	commands["quit"] = command{
-		name:        "quit",
 		description: "Quit and offload node data gracefully",
 		do:          quit,
 	}
 	commands["port"] = command{
-		name:        "port",
 		description: "Change the listening port",
 		usage:       "port <number>",
 		do:          changePort,
 	}
 	commands["ping"] = command{
-		name:        "ping",
 		description: "Ping another node",
 		usage:       "ping <host>:<port>",
 		do:          ping,
 	}
 	commands["create"] = command{
-		name:        "create",
 		description: "Create and join a new chord ring",
 		do:          create,
 	}
 	commands["join"] = command{
-		name:        "join",
 		description: "Join a chord ring from a known node address",
 		usage:       "join <host>:<port>",
 		do:          join,
 	}
 	commands["put"] = command{
-		name:         "put",
 		description:  "Add a key/value pair to the database",
 		usage:        "put <key> <value>",
 		do:           put,
 		joinRequired: true,
 	}
 	commands["get"] = command{
-		name:         "get",
 		description:  "Get the value of a key",
 		usage:        "get <key>",
 		do:           get,
 		joinRequired: true,
 	}
 	commands["delete"] = command{
-		name:         "delete",
 		description:  "Delete a key and its associated value",
 		usage:        "delete <key>",
 		do:           deleteKey,
 		joinRequired: true,
 	}
 	commands["putrandom"] = command{
-		name:         "putrandom",
 		description:  "Add random data items to the database",
 		usage:        "putrandom <num_items>",
 		do:           putRandom,
@@ -120,30 +119,40 @@ func defaultCommands() {
 	}
 	// Information/debugging
 	commands["dump"] = command{
-		name:         "dump",
 		description:  "Dumps current node information",
-		do:           dump,
+		do:           dumpCurrent,
 		joinRequired: true,
 	}
 	commands["dumpkey"] = command{
-		name:         "dumpkey",
 		description:  "Dumps info on the node responsible for a key",
 		usage:        "dumpkey <key>",
 		do:           dumpKey,
 		joinRequired: true,
 	}
 	commands["dumpaddr"] = command{
-		name:        "dumpaddr",
 		description: "Dumps info on the node at the requested address",
 		usage:       "dumpaddr <host>:<port>",
 		do:          dumpAddress,
 	}
 	commands["dumpall"] = command{
-		name:         "dumpall",
 		description:  "Dumps info on each node in the current ring",
 		do:           dumpAll,
 		joinRequired: true,
 	}
+
+	// Set display variables
+	for name, cmd := range commands {
+		if len(cmd.description) > descriptionWidth {
+			descriptionWidth = len(cmd.description)
+		}
+		if len(name) > nameWidth {
+			nameWidth = len(name)
+		}
+		if len(cmd.usage) > usageWidth {
+			usageWidth = len(cmd.usage)
+		}
+	}
+	totalWidth = nameWidth + descriptionWidth + usageWidth + 8
 }
 
 //////////////
@@ -154,30 +163,37 @@ func defaultCommands() {
 func listCommands(_ string) error {
 	var w strings.Builder
 
-	w.WriteString(fmt.Sprintf("+%s+\n", strings.Repeat("-", 98)))
-	w.WriteString(fmt.Sprintf("|%s|\n", centerText("COMMANDS LIST", 98, ' ')))
+	w.WriteString(fmt.Sprintf("+%s+\n", strings.Repeat("-", totalWidth)))
+	w.WriteString(fmt.Sprintf("|%s|\n", centerText("COMMANDS LIST", totalWidth, ' ')))
 	w.WriteString(fmt.Sprintf(
 		"+%s+%s+%s+\n",
-		strings.Repeat("-", 12),
-		strings.Repeat("-", 52),
-		strings.Repeat("-", 32),
+		strings.Repeat("-", nameWidth+2),
+		strings.Repeat("-", descriptionWidth+2),
+		strings.Repeat("-", usageWidth+2),
 	))
 	w.WriteString(fmt.Sprintf(
-		"| %-10s | %-50s | %-20s |\n",
-		centerText("NAME", 10, ' '),
-		centerText("DESCRIPTION", 50, ' '),
-		centerText("USAGE", 30, ' '),
+		"| %s | %s | %s |\n",
+		centerText("NAME", nameWidth, ' '),
+		centerText("DESCRIPTION", descriptionWidth, ' '),
+		centerText("USAGE", usageWidth, ' '),
 	))
 	w.WriteString(fmt.Sprintf(
 		"+%s+%s+%s+\n",
-		strings.Repeat("-", 12),
-		strings.Repeat("-", 52),
-		strings.Repeat("-", 32),
+		strings.Repeat("-", nameWidth+2),
+		strings.Repeat("-", descriptionWidth+2),
+		strings.Repeat("-", usageWidth+2),
 	))
 
-	cmds := []command{}
-	for _, v := range commands {
-		cmds = append(cmds, v)
+	type namedCmd struct {
+		name string
+		command
+	}
+	cmds := []namedCmd{}
+	for name, cmd := range commands {
+		cmds = append(cmds, namedCmd{
+			name,
+			cmd,
+		})
 	}
 
 	// Sort by name
@@ -186,18 +202,18 @@ func listCommands(_ string) error {
 	})
 
 	for _, c := range cmds {
-		w.WriteString(fmt.Sprintf("| %-10s | %-50s |", c.name, c.description))
+		w.WriteString(fmt.Sprintf("| %s | %s |", padText(c.name, nameWidth), padText(c.description, descriptionWidth)))
 		if c.usage != "" {
-			w.WriteString(fmt.Sprintf(" %-30s |\n", c.usage))
+			w.WriteString(fmt.Sprintf(" %-s |\n", padText(c.usage, usageWidth)))
 		} else {
-			w.WriteString(fmt.Sprintf(" %-30s |\n", c.name))
+			w.WriteString(fmt.Sprintf(" %-s |\n", padText(c.name, usageWidth)))
 		}
 	}
 	w.WriteString(fmt.Sprintf(
 		"+%s+%s+%s+\n",
-		strings.Repeat("-", 12),
-		strings.Repeat("-", 52),
-		strings.Repeat("-", 32),
+		strings.Repeat("-", nameWidth+2),
+		strings.Repeat("-", descriptionWidth+2),
+		strings.Repeat("-", usageWidth+2),
 	))
 
 	fmt.Println(w.String())
@@ -208,6 +224,24 @@ func listCommands(_ string) error {
 // Quit gracefully and offload data to other nodes
 func quit(_ string) error {
 	fmt.Println("Quitting...")
+	// Offload all keys
+	if localNode.Successors[0] != &localNode.Address {
+		if err := call(*localNode.Successors[0], "NodeActor.PutAll", localNode.Data, &None{}); err != nil {
+			log.Fatalf("offloading data to successor: %v", err)
+		}
+	} else {
+		fmt.Println("Last node in ring")
+		fmt.Println("Data will be lost on quit")
+		fmt.Println("Are you sure? (y/n) ")
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		switch {
+		case scanner.Text() == "y":
+			break
+		default:
+			return errors.New("quit aborted")
+		}
+	}
 	os.Exit(0)
 	return nil
 }
@@ -273,13 +307,30 @@ func join(inputAddress string) error {
 }
 
 // Dump info on local node
-func dump(_ string) error {
+func dumpCurrent(_ string) error {
 	fmt.Println(localNode)
 	return nil
 }
 
 // Dumps info on the node responsible for a key
-func dumpKey(key string) error {
+func dumpKey(input string) error {
+	if words := strings.Fields(input); len(words) == 1 {
+		key := Key(words[0])
+		fmt.Printf("Get item with key: %s\n", key)
+		// Find address to get from
+		address, err := find(key.hashed(), &localNode.Address)
+		if err != nil {
+			return fmt.Errorf("finding node with key: %v", err)
+		}
+		// Now get the value
+		var dump DumpReturn
+		if err := call(*address, "NodeActor.Dump", None{}, &dump); err != nil {
+			return fmt.Errorf("getting dump info: %v", err)
+		}
+		fmt.Println(dump.Dump)
+	} else {
+		fmt.Println("Too many values: <key>")
+	}
 	return nil
 }
 
@@ -289,16 +340,33 @@ func dumpAddress(inputAddress string) error {
 	if err != nil {
 		return fmt.Errorf("bad address: %v", err)
 	}
-	var dump string
+	var dump DumpReturn
 	if err := call(address, "NodeActor.Dump", None{}, &dump); err != nil {
 		return fmt.Errorf("getting dump info: %v", err)
 	}
-	fmt.Println(dump)
+	fmt.Println(dump.Dump)
 	return nil
 }
 
 // Dumps info on each node in the current ring
 func dumpAll(_ string) error {
+	// First print current node
+	fmt.Println("Current Node:")
+	fmt.Println(localNode)
+
+	dump := DumpReturn{
+		Dump:      "",
+		Successor: localNode.Successors[0],
+	}
+	for dump.Successor != &localNode.Address {
+		// Now get the value
+		if err := call(*dump.Successor, "NodeActor.Dump", None{}, &dump); err != nil {
+			return fmt.Errorf("getting dump info: %v", err)
+		}
+		// Separator
+		fmt.Println(strings.Repeat("=", 30))
+		fmt.Println(dump.Dump)
+	}
 	return nil
 }
 
@@ -308,12 +376,12 @@ func put(input string) error {
 		fmt.Printf("Put: %s => %s\n", key, value)
 		kv := KeyValue{key, value}
 		// Find address to put at
-		address, err := find(key.hashed(), localNode.Address)
+		address, err := find(key.hashed(), &localNode.Address)
 		if err != nil {
 			return fmt.Errorf("finding correct node to put at: %v", err)
 		}
 		// Now put it there
-		if err := call(address, "NodeActor.Put", kv, &None{}); err != nil {
+		if err := call(*address, "NodeActor.Put", kv, &None{}); err != nil {
 			return fmt.Errorf("putting: %v", err)
 		}
 		fmt.Println("successful put: ", kv)
@@ -328,13 +396,13 @@ func get(input string) error {
 		key := Key(words[0])
 		fmt.Printf("Get item with key: %s\n", key)
 		// Find address to get from
-		address, err := find(key.hashed(), localNode.Address)
+		address, err := find(key.hashed(), &localNode.Address)
 		if err != nil {
 			return fmt.Errorf("finding correct node to get from: %v", err)
 		}
 		// Now get the value
 		var value string
-		if err := call(address, "NodeActor.Get", key, &value); err != nil {
+		if err := call(*address, "NodeActor.Get", key, &value); err != nil {
 			return fmt.Errorf("getting: %v", err)
 		}
 		fmt.Println(KeyValue{key, value})
@@ -349,13 +417,13 @@ func deleteKey(input string) error {
 		key := Key(words[0])
 		fmt.Printf("Delete item with key: %s", key)
 		// Find address to delete from
-		address, err := find(key.hashed(), localNode.Address)
+		address, err := find(key.hashed(), &localNode.Address)
 		if err != nil {
 			return fmt.Errorf("finding correct node to delete from: %v", err)
 		}
 		// Now delete the value
 		var value string
-		if err := call(address, "NodeActor.Delete", key, &value); err != nil {
+		if err := call(*address, "NodeActor.Delete", key, &value); err != nil {
 			return fmt.Errorf("deleting: %v", err)
 		}
 		fmt.Printf("Successfully deleted item with key: %s, and value %s", key, value)

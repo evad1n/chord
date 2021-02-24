@@ -37,6 +37,14 @@ func centerText(text string, size int, fill rune) string {
 	return strings.Repeat(string(fill), front) + text + strings.Repeat(string(fill), size-front)
 }
 
+// Pads string with spaces for desired length
+func padText(text string, desiredlength int) string {
+	for len(text) < desiredlength {
+		text += " "
+	}
+	return text
+}
+
 // Validate an address (host IP + port)
 func validateAddress(address string) (Address, error) {
 	// Regex for <IPv4>:<PORT>
@@ -45,8 +53,4 @@ func validateAddress(address string) (Address, error) {
 		return Address(address), nil
 	}
 	return Address(address), errors.New("invalid address format: <host>:<port>")
-}
-
-func (kv KeyValue) String() string {
-	return fmt.Sprintf("%20s => %s\n", kv.Key, kv.Value)
 }

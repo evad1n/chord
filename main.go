@@ -19,9 +19,13 @@ func main() {
 	// DEBUGGING
 	log.SetFlags(log.Lshortfile)
 
+	fmt.Print("Welcome to the CHORD distributed hash table(DHT)\n\n")
+
 	localHost = getLocalAddress()
 	fmt.Printf("Current address: %s\n", localHost)
 	fmt.Printf("Current port: %d\n", localPort)
+
+	fmt.Println()
 
 	createMaps()
 	defaultCommands()

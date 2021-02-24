@@ -13,12 +13,12 @@ type (
 
 	// Node is a part of the chord ring
 	Node struct {
-		Address     Address
+		Address     Address  // The string representation of an address (HOST:PORT)
 		Hash        *big.Int // The hash of the address
-		Successors  []Address
+		Successors  []*Address
 		Predecessor *Address
-		Fingers     [160]Address   // The finger table pointing to other nodes on the ring
-		Data        map[Key]string // The data items stored at this node
+		Fingers     [numFingerEntries]*Address // The finger table pointing to other nodes on the ring
+		Data        map[Key]string             // The data items stored at this node
 	}
 
 	// Hashable can be hashed and implements fmt.Stringer
@@ -45,13 +45,19 @@ type (
 	// AddressResult represents a return address and if that address is the desired address
 	AddressResult struct {
 		Found   bool // Whether the returned address is a final or intermediate step
-		Address Address
+		Address *Address
 	}
 
 	// NodeLink contains the predecessor and successor links for a node
 	NodeLink struct {
 		Predecessor *Address
-		Successors  []Address
+		Successors  []*Address
+	}
+
+	// DumpReturn contains the dump info and the successor address
+	DumpReturn struct {
+		Dump      string // The string containing all the dump info
+		Successor *Address
 	}
 
 	// None is a null value
