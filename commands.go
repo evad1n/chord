@@ -224,24 +224,31 @@ func listCommands(_ string) error {
 // Quit gracefully and offload data to other nodes
 func quit(_ string) error {
 	fmt.Println("Quitting...")
-	// Offload all keys
-	if localNode.Successors[0] != &localNode.Address {
-		if err := call(*localNode.Successors[0], "NodeActor.PutAll", localNode.Data, &None{}); err != nil {
-			log.Fatalf("offloading data to successor: %v", err)
-		}
-	} else {
-		fmt.Println("Last node in ring")
-		fmt.Println("Data will be lost on quit")
-		fmt.Println("Are you sure? (y/n) ")
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
-		switch {
-		case scanner.Text() == "y":
-			break
-		default:
-			return errors.New("quit aborted")
+	if joined {
+		// Offload all keys
+		if *localNode.Successors[0] != localNode.Address {
+			if err := call(*localNode.Successors[0], "NodeActor.PutAll", localNode.Data, &None{}); err != nil {
+				log.Fatalf("offloading data to successor: %v", err)
+			}
+			log.Println("Successfully offloaded data to successor")
+		} else {
+			fmt.Print(ansiWrap(`
+Last node in ring
+Data will be lost on quit
+Are you sure? (y/n) `,
+				ansiColors["yellow"],
+			))
+			scanner := bufio.NewScanner(os.Stdin)
+			scanner.Scan()
+			switch {
+			case scanner.Text() == "y":
+				break
+			default:
+				return errors.New("quit aborted")
+			}
 		}
 	}
+	fmt.Println(ansiWrap("Goodbye!", ansiColors["cyan"]))
 	os.Exit(0)
 	return nil
 }
@@ -283,6 +290,7 @@ func create(_ string) error {
 		}
 		// Successful creation of new ring
 		joined = true
+		fmt.Printf("Local Address: %s\n", localNode.Address)
 	} else {
 		return errors.New("can't create ring. already part of a ring")
 	}
@@ -300,6 +308,7 @@ func join(inputAddress string) error {
 		}
 		// Successful join
 		joined = true
+		fmt.Printf("Local Address: %s\n", localNode.Address)
 	} else {
 		return errors.New("can't join ring. already part of a ring")
 	}
@@ -318,10 +327,11 @@ func dumpKey(input string) error {
 		key := Key(words[0])
 		fmt.Printf("Get item with key: %s\n", key)
 		// Find address to get from
-		address, err := find(key.hashed(), &localNode.Address)
+		address, err := find(key.hashed(), localNode.Address)
 		if err != nil {
 			return fmt.Errorf("finding node with key: %v", err)
 		}
+		// FIX: should i error if key doesn't exist (extra get check)
 		// Now get the value
 		var dump DumpReturn
 		if err := call(*address, "NodeActor.Dump", None{}, &dump); err != nil {
@@ -358,13 +368,13 @@ func dumpAll(_ string) error {
 		Dump:      "",
 		Successor: localNode.Successors[0],
 	}
-	for dump.Successor != &localNode.Address {
+	for *dump.Successor != localNode.Address {
 		// Now get the value
 		if err := call(*dump.Successor, "NodeActor.Dump", None{}, &dump); err != nil {
 			return fmt.Errorf("getting dump info: %v", err)
 		}
 		// Separator
-		fmt.Println(strings.Repeat("=", 30))
+		fmt.Println(strings.Repeat("=", 30) + "\n")
 		fmt.Println(dump.Dump)
 	}
 	return nil
@@ -376,7 +386,7 @@ func put(input string) error {
 		fmt.Printf("Put: %s => %s\n", key, value)
 		kv := KeyValue{key, value}
 		// Find address to put at
-		address, err := find(key.hashed(), &localNode.Address)
+		address, err := find(key.hashed(), localNode.Address)
 		if err != nil {
 			return fmt.Errorf("finding correct node to put at: %v", err)
 		}
@@ -396,7 +406,7 @@ func get(input string) error {
 		key := Key(words[0])
 		fmt.Printf("Get item with key: %s\n", key)
 		// Find address to get from
-		address, err := find(key.hashed(), &localNode.Address)
+		address, err := find(key.hashed(), localNode.Address)
 		if err != nil {
 			return fmt.Errorf("finding correct node to get from: %v", err)
 		}
@@ -415,9 +425,9 @@ func get(input string) error {
 func deleteKey(input string) error {
 	if words := strings.Fields(input); len(words) == 1 {
 		key := Key(words[0])
-		fmt.Printf("Delete item with key: %s", key)
+		fmt.Printf("Delete item with key: %s\n", key)
 		// Find address to delete from
-		address, err := find(key.hashed(), &localNode.Address)
+		address, err := find(key.hashed(), localNode.Address)
 		if err != nil {
 			return fmt.Errorf("finding correct node to delete from: %v", err)
 		}
@@ -426,13 +436,15 @@ func deleteKey(input string) error {
 		if err := call(*address, "NodeActor.Delete", key, &value); err != nil {
 			return fmt.Errorf("deleting: %v", err)
 		}
-		fmt.Printf("Successfully deleted item with key: %s, and value %s", key, value)
+		fmt.Printf("Successfully deleted item with key: %s, and value %s\n", key, value)
 	} else {
 		fmt.Println("Too many values: <key>")
 	}
 	return nil
 }
 
+// TODO:
 func putRandom(count string) error {
+
 	return nil
 }

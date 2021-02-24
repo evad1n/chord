@@ -3,18 +3,19 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"strings"
 )
 
 // Local unexported node functions
 
-// Find returns the address of the node responsible for the given id.
+// Find returns the address of the node responsible (successor) for the given id.
 // Node agnostic, just acts on a ring
-func find(id *big.Int, start *Address) (*Address, error) {
+func find(id *big.Int, start Address) (*Address, error) {
 	result := AddressResult{
 		Found:   false,
-		Address: start,
+		Address: &start,
 	}
 	i := 0
 	for !result.Found && i < maxRequests {
@@ -30,12 +31,13 @@ func find(id *big.Int, start *Address) (*Address, error) {
 }
 
 // Search local fingers for highest predecessor of id
-func (n *Node) closestPrecedingNode(id *big.Int) *Address {
-	for i := numFingerEntries; i > 0; i-- {
+func (n Node) closestPrecedingNode(id *big.Int) *Address {
+	for i := numFingerEntries - 1; i > 0; i-- {
 		if n.Fingers[i] == nil {
 			continue
 		}
 		if between(n.Hash, n.Fingers[i].hashed(), id, false) {
+			log.Printf("closest preceding node: using finger entry @ index %d", i)
 			return n.Fingers[i]
 		}
 	}
@@ -59,6 +61,7 @@ func createRing() (*Node, error) {
 	if err := n.startNode(); err != nil {
 		return n, fmt.Errorf("starting node RPC server: %v", err)
 	}
+	log.Println("created ring successfully")
 	// Set successor to itself
 	n.Successors = append(n.Successors, &n.Address)
 	// Start background tasks
@@ -68,26 +71,25 @@ func createRing() (*Node, error) {
 
 // Join an existing chord ring
 func joinRing(joinAddress Address) (*Node, error) {
-	localAddress := Address(localHost + ":" + fmt.Sprint(localPort))
 	n := createNode()
 	// Call find starting at supplied address, searching for local address
-	successor, err := find(localAddress.hashed(), &joinAddress)
+	successor, err := find(n.Address.hashed(), joinAddress)
 	if err != nil {
 		return nil, fmt.Errorf("finding place on ring: %v", err)
 	}
+	log.Printf("joining ring @ %s\n", successor)
 	n.Successors = append(n.Successors, successor)
+
 	// Now start server
 	if err := n.startNode(); err != nil {
 		return n, fmt.Errorf("starting node RPC server: %v", err)
 	}
 	// Start background tasks
 	n.startBackgroundMaintenance()
-	// Request
-
 	return n, nil
 }
 
-// Returns true if elt is between start and end on the ring
+// Returns true if elt is between start and end on the ring, inclusive is for the end range
 func between(start *big.Int, elt *big.Int, end *big.Int, inclusive bool) bool {
 	if end.Cmp(start) > 0 {
 		return (start.Cmp(elt) < 0 && elt.Cmp(end) < 0) || (inclusive && elt.Cmp(end) == 0)
@@ -124,15 +126,13 @@ func (n Node) String() string {
 			w.WriteString(fmt.Sprintf("   %s\n", KeyValue{key, value}))
 		}
 	} else {
-		w.WriteString("\nNo data items")
+		w.WriteString("\nNo data items\n")
 	}
-
-	w.WriteString("\n")
 
 	return w.String()
 }
 
 // Print a key value pair
 func (kv KeyValue) String() string {
-	return fmt.Sprintf("%20s => %s", kv.Key, kv.Value)
+	return fmt.Sprintf("%-20s => %s", kv.Key, kv.Value)
 }

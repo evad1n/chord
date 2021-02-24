@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"strings"
+	"time"
 )
 
 var (
@@ -34,6 +36,8 @@ func main() {
 }
 
 func commandLoop() {
+	rand.Seed(time.Now().Unix())
+
 	scanner := bufio.NewScanner(os.Stdin)
 
 	fmt.Print(">>> ")
@@ -50,6 +54,8 @@ func commandLoop() {
 				default:
 					if err := cmd.do(params); err != nil {
 						fmt.Println(ansiWrap(err.Error(), ansiColors["red"]))
+					} else {
+						fmt.Println(ansiWrap("OK", ansiColors["green"]))
 					}
 				}
 			} else {

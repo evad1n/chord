@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"net"
 	"net/http"
@@ -53,14 +52,12 @@ func (a NodeActor) wait(f handler) {
 func call(address Address, method string, request interface{}, reply interface{}) error {
 	client, err := rpc.DialHTTP("tcp", string(address))
 	if err != nil {
-		log.Printf("rpc call dialing: %v", err)
 		return err
 	}
 	defer client.Close()
 
 	// Synchronous call
 	if err := client.Call(method, request, reply); err != nil {
-		log.Printf("client rpc call '%s': %v", method, err)
 		return err
 	}
 
