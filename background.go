@@ -29,7 +29,7 @@ func (n *Node) startBackgroundMaintenance() {
 	go func() {
 		for range time.Tick(time.Second * stabilizeInterval) {
 			if err := n.stabilize(); err != nil {
-				log.Fatalf("stabilize: %v", err)
+				log.Printf("stabilize: %v", err)
 			}
 		}
 	}()
@@ -41,7 +41,7 @@ func (n *Node) startBackgroundMaintenance() {
 	go func() {
 		for range time.Tick(time.Second * fixFingersInterval) {
 			if err := n.fixFingers(); err != nil {
-				log.Fatalf("fix fingers: %v", err)
+				log.Printf("fix fingers: %v", err)
 			}
 		}
 	}()
@@ -53,7 +53,7 @@ func (n *Node) startBackgroundMaintenance() {
 	go func() {
 		for range time.Tick(time.Second * checkPredecessorInterval) {
 			if err := n.checkPredecessor(); err != nil {
-				log.Fatalf("check predecessor: %v", err)
+				log.Printf("check predecessor: %v", err)
 			}
 		}
 	}()
@@ -100,7 +100,7 @@ func (n *Node) stabilize() error {
 	// FIX: Without checkPredecessor the predecessor might have failed and this will crash
 	// Notify successor to check its predecessor
 	if err := call(n.Successors[0], "NodeActor.Notify", n.Address, &None{}); err != nil {
-		return fmt.Errorf("notifying successor (successors: %v): %v", n.Successors, err)
+		return fmt.Errorf("notifying successor: %v", err)
 	}
 
 	return nil

@@ -12,7 +12,7 @@ import (
 
 var (
 	localHost string
-	localPort = 3410  // Port to listen on
+	localPort = 3400  // Port to listen on
 	localNode *Node   // The local node, only set after join/creation
 	joined    = false // Whether this node is part of a ring yet
 )

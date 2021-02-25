@@ -79,6 +79,14 @@ func defaultCommands() {
 		usage:       "port <number>",
 		do:          changePort,
 	}
+	commands["getaddr"] = command{
+		description: "Get the current node address",
+		do: func(_ string) error {
+			fmt.Println(localNode.Address)
+			return nil
+		},
+		joinRequired: true,
+	}
 	commands["ping"] = command{
 		description: "Ping another node",
 		usage:       "ping <host>:<port>",
@@ -339,7 +347,7 @@ func dumpKey(input string) error {
 		}
 		fmt.Println(dump.Dump)
 	} else {
-		fmt.Println("Too many values: <key>")
+		fmt.Println("Wrong number of arguments: <key>")
 	}
 	return nil
 }
@@ -389,7 +397,7 @@ func put(input string) error {
 			return fmt.Errorf("put error: %v", err)
 		}
 	} else {
-		return errors.New("too many values: <key> <value>")
+		return errors.New("Wrong number of arguments: <key> <value>")
 	}
 	return nil
 }
@@ -410,7 +418,7 @@ func get(input string) error {
 		}
 		fmt.Println(KeyValue{key, value})
 	} else {
-		fmt.Println("Too many values: <key>")
+		fmt.Println("Wrong number of arguments: <key>")
 	}
 	return nil
 }
@@ -431,7 +439,7 @@ func deleteKey(input string) error {
 		}
 		fmt.Printf("Successfully deleted item with key: %s, and value %s\n", key, value)
 	} else {
-		fmt.Println("Too many values: <key>")
+		fmt.Println("Wrong number of arguments: <key>")
 	}
 	return nil
 }

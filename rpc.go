@@ -163,11 +163,10 @@ func (a NodeActor) PutAll(data map[Key]string, _ *None) error {
 // GetAll gathers all key/value pairs from a node and transfers them to a newly joined node that they belong to
 func (a NodeActor) GetAll(newAddress Address, data *map[Key]string) error {
 	var err error
-	transfer := make(map[Key]string)
 	a.wait(func(n *Node) {
 		for key, value := range n.Data {
-			if between(newAddress.hashed(), key.hashed(), n.Successors[0].hashed(), true) {
-				transfer[key] = value
+			if !between(newAddress.hashed(), key.hashed(), n.Hash, true) {
+				(*data)[key] = value
 				delete(n.Data, key)
 			}
 		}

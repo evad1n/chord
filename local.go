@@ -85,6 +85,11 @@ func joinRing(joinAddress Address) (*Node, error) {
 	}
 	// Start background tasks
 	n.startBackgroundMaintenance()
+	// Ask for successor for any data that should be ours
+	if err := call(successor, "NodeActor.GetAll", n.Address, &n.Data); err != nil {
+		log.Fatalf("transferring data from successor: %v", err)
+	}
+	log.Println("Successfully transferred data to successor")
 	return n, nil
 }
 
