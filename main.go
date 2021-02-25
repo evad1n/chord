@@ -31,8 +31,10 @@ func (w myWriter) Write(p []byte) (n int, err error) {
 }
 
 func main() {
-	createMaps()
+	// Setup
 	rand.Seed(time.Now().Unix())
+	createMaps()
+	defaultCommands()
 
 	// DEBUGGING
 	log.SetFlags(log.Lshortfile)
@@ -43,10 +45,7 @@ func main() {
 	localHost = getLocalAddress()
 	fmt.Printf("Current address: %s\n", localHost)
 	fmt.Printf("Current port: %d\n", localPort)
-
 	fmt.Println()
-
-	defaultCommands()
 
 	commandLoop()
 }
