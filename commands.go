@@ -226,8 +226,8 @@ func quit(_ string) error {
 	fmt.Println("Quitting...")
 	if joined {
 		// Offload all keys
-		if *localNode.Successors[0] != localNode.Address {
-			if err := call(*localNode.Successors[0], "NodeActor.PutAll", localNode.Data, &None{}); err != nil {
+		if localNode.Successors[0] != localNode.Address {
+			if err := call(localNode.Successors[0], "NodeActor.PutAll", localNode.Data, &None{}); err != nil {
 				log.Fatalf("offloading data to successor: %v", err)
 			}
 			log.Println("Successfully offloaded data to successor")
@@ -334,7 +334,7 @@ func dumpKey(input string) error {
 		// FIX: should i error if key doesn't exist (extra get check)
 		// Now get the value
 		var dump DumpReturn
-		if err := call(*address, "NodeActor.Dump", None{}, &dump); err != nil {
+		if err := call(address, "NodeActor.Dump", None{}, &dump); err != nil {
 			return fmt.Errorf("getting dump info: %v", err)
 		}
 		fmt.Println(dump.Dump)
@@ -368,9 +368,9 @@ func dumpAll(_ string) error {
 		Dump:      "",
 		Successor: localNode.Successors[0],
 	}
-	for *dump.Successor != localNode.Address {
+	for dump.Successor != localNode.Address {
 		// Now get the value
-		if err := call(*dump.Successor, "NodeActor.Dump", None{}, &dump); err != nil {
+		if err := call(dump.Successor, "NodeActor.Dump", None{}, &dump); err != nil {
 			return fmt.Errorf("getting dump info: %v", err)
 		}
 		// Separator
@@ -385,16 +385,9 @@ func put(input string) error {
 		key, value := Key(words[0]), words[1]
 		fmt.Printf("Put: %s => %s\n", key, value)
 		kv := KeyValue{key, value}
-		// Find address to put at
-		address, err := find(key.hashed(), localNode.Address)
-		if err != nil {
-			return fmt.Errorf("finding correct node to put at: %v", err)
+		if err := putOne(kv); err != nil {
+			return fmt.Errorf("put error: %v", err)
 		}
-		// Now put it there
-		if err := call(*address, "NodeActor.Put", kv, &None{}); err != nil {
-			return fmt.Errorf("putting: %v", err)
-		}
-		fmt.Println("successful put: ", kv)
 	} else {
 		return errors.New("too many values: <key> <value>")
 	}
@@ -412,7 +405,7 @@ func get(input string) error {
 		}
 		// Now get the value
 		var value string
-		if err := call(*address, "NodeActor.Get", key, &value); err != nil {
+		if err := call(address, "NodeActor.Get", key, &value); err != nil {
 			return fmt.Errorf("getting: %v", err)
 		}
 		fmt.Println(KeyValue{key, value})
@@ -433,7 +426,7 @@ func deleteKey(input string) error {
 		}
 		// Now delete the value
 		var value string
-		if err := call(*address, "NodeActor.Delete", key, &value); err != nil {
+		if err := call(address, "NodeActor.Delete", key, &value); err != nil {
 			return fmt.Errorf("deleting: %v", err)
 		}
 		fmt.Printf("Successfully deleted item with key: %s, and value %s\n", key, value)
@@ -443,8 +436,34 @@ func deleteKey(input string) error {
 	return nil
 }
 
-// TODO:
-func putRandom(count string) error {
+func putRandom(input string) error {
+	if count, err := strconv.Atoi(input); err != nil {
+		return fmt.Errorf("bad number: %v", err)
+	} else {
+		for i := 0; i < count; i++ {
 
+			kv := KeyValue{
+				Key:   Key(randomString(5)),
+				Value: randomString(5),
+			}
+			if err := putOne(kv); err != nil {
+				return fmt.Errorf("put error: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
+func putOne(kv KeyValue) error {
+	// Find address to put at
+	address, err := find(kv.Key.hashed(), localNode.Address)
+	if err != nil {
+		return fmt.Errorf("finding correct node to put at: %v", err)
+	}
+	// Now put it there
+	if err := call(address, "NodeActor.Put", kv, &None{}); err != nil {
+		return fmt.Errorf("putting: %v", err)
+	}
+	fmt.Println("successful put: ", kv)
 	return nil
 }

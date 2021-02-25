@@ -13,8 +13,8 @@ const (
 	numFingerEntries = 161
 
 	stabilizeInterval        = 2
-	fixFingersInterval       = 5
-	checkPredecessorInterval = 5
+	fixFingersInterval       = 2
+	checkPredecessorInterval = 2
 )
 
 var next = 0 // The next entry in the finger table to fix
@@ -62,20 +62,27 @@ func (n *Node) startBackgroundMaintenance() {
 // Maintain successor list correctly
 func (n *Node) stabilize() error {
 	var links NodeLink
-	if err := call(*n.Successors[0], "NodeActor.GetNodeLinks", None{}, &links); err != nil {
+	if err := call(n.Successors[0], "NodeActor.GetNodeLinks", None{}, &links); err != nil {
 		// Cut off that one from list
 		n.Successors = n.Successors[1:]
 		if len(n.Successors) == 0 {
 			// No successors so set successor to ourself
-			n.Successors = append(n.Successors, &n.Address)
+			n.Successors = append(n.Successors, n.Address)
 		}
-		log.Printf("sucessor failure, new successor is %s: %v\n", n.Successors[0], err)
+		log.Printf("stabilize: sucessor failure, new successor is %s: %v\n", n.Successors[0], err)
 	} else {
 		// Update successor links
 
+		for i := 1; i < maxSuccessors; i++ {
+			if i >= len(n.Successors) || n.Successors[i] != links.Successors[i-1] {
+				log.Println("stabilize: successors list changed")
+				break
+			}
+		}
+
 		// Add current node's first successor to successor's successor list
 		// Prepend current successor to a slice of the successors
-		n.Successors = append([]*Address{n.Successors[0]}, links.Successors...)
+		n.Successors = append([]Address{n.Successors[0]}, links.Successors...)
 		// Truncate if necessary
 		if len(n.Successors) > maxSuccessors {
 			n.Successors = n.Successors[:maxSuccessors]
@@ -84,30 +91,22 @@ func (n *Node) stabilize() error {
 		// Update predecessor links
 
 		// Check if our successor's predecessor should be our successor
-		if links.Predecessor != nil && between(n.Hash, links.Predecessor.hashed(), n.Successors[0].hashed(), false) {
+		if links.Predecessor != "" && between(n.Hash, links.Predecessor.hashed(), n.Successors[0].hashed(), false) {
 			// Set our successor to be this node in between now
 			n.Successors[0] = links.Predecessor
-			log.Printf("better successor found: %s\n", n.Successors[0])
+			log.Printf("stabilize: better successor found: %s\n", n.Successors[0])
 		}
 	}
 	// FIX: Without checkPredecessor the predecessor might have failed and this will crash
 	// Notify successor to check its predecessor
-	if err := call(*n.Successors[0], "NodeActor.Notify", n.Address, &None{}); err != nil {
+	if err := call(n.Successors[0], "NodeActor.Notify", n.Address, &None{}); err != nil {
 		return fmt.Errorf("notifying successor (successors: %v): %v", n.Successors, err)
 	}
 
 	return nil
 }
 
-/* // called periodically. refreshes finger table entries.
-// next stores the index of the next finger to fix.
-n.fix fingers()
-next = next + 1 ;
-if (next > m)
-next = 1 ;
-finger[next] = find successor(n + 2
-next−1
-); */
+// Refreshes finger table entries.
 func (n *Node) fixFingers() error {
 	next++
 	if next >= numFingerEntries {
@@ -117,27 +116,32 @@ func (n *Node) fixFingers() error {
 	if err != nil {
 		return fmt.Errorf("finding finger table entry: %v", err)
 	}
+	changed := n.Fingers[next] == "" || (address != n.Fingers[next])
 	// Optimization because sparse nodes mean the successor for each entry is probably the same
-	log.Printf("fixFingers: writing entry %d as %s", next, address)
+	if changed {
+		log.Printf("fixFingers: writing new entry %d as %s", next, address)
+	}
 	for next < numFingerEntries && between(n.Hash, n.jump(next), address.hashed(), false) {
 		n.Fingers[next] = address
 		next++
 	}
-	log.Printf("fixFingers: repeated up to entry %d", next-1)
+	if changed {
+		log.Printf("fixFingers: repeated up to entry %d", next-1)
+	}
 
 	return nil
 }
 
 // Verify predecessor is still functional
 func (n *Node) checkPredecessor() error {
-	if n.Predecessor == nil {
-		log.Println("no predecessor")
+	if n.Predecessor == "" {
+		log.Println("checkPredecessor: no predecessor")
 		return nil
 	}
 	var success bool
-	if err := call(*n.Predecessor, "NodeActor.Ping", None{}, &success); err != nil || !success {
-		log.Printf("failed to contact predecessor: %v\n", err)
-		n.Predecessor = nil
+	if err := call(n.Predecessor, "NodeActor.Ping", None{}, &success); err != nil || !success {
+		log.Printf("checkPredecessor: failed to contact predecessor: %v\n", err)
+		n.Predecessor = ""
 	}
 	return nil
 }

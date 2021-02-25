@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"regexp"
 	"strings"
@@ -53,4 +54,15 @@ func validateAddress(address string) (Address, error) {
 		return Address(address), nil
 	}
 	return Address(address), errors.New("invalid address format: <host>:<port>")
+}
+
+// Returns a random string of the specified length
+func randomString(length int) string {
+	runes := []rune{}
+	for i := 0; i < length; i++ {
+		// 97-122 range of alphabet characters
+		r := rand.Intn(26) + 97
+		runes = append(runes, rune(r))
+	}
+	return string(runes)
 }

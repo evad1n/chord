@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"net"
 	"net/http"
@@ -94,8 +95,9 @@ func (a NodeActor) FindSuccessor(id *big.Int, result *AddressResult) error {
 // Notify signals a node that another node thinks it should be its predecessor
 func (a NodeActor) Notify(address Address, _ *None) error {
 	a.wait(func(n *Node) {
-		if n.Predecessor == nil || between(n.Predecessor.hashed(), address.hashed(), n.Hash, false) {
-			n.Predecessor = &address
+		if n.Predecessor == "" || between(n.Predecessor.hashed(), address.hashed(), n.Hash, false) {
+			log.Println("Notify: found new predecessor")
+			n.Predecessor = address
 		}
 	})
 	return nil

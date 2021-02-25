@@ -18,6 +18,7 @@ var (
 )
 
 func main() {
+	rand.Seed(time.Now().Unix())
 	// DEBUGGING
 	log.SetFlags(log.Lshortfile)
 
@@ -36,8 +37,6 @@ func main() {
 }
 
 func commandLoop() {
-	rand.Seed(time.Now().Unix())
-
 	scanner := bufio.NewScanner(os.Stdin)
 
 	fmt.Print(">>> ")

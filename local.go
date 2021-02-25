@@ -12,14 +12,14 @@ import (
 
 // Find returns the address of the node responsible (successor) for the given id.
 // Node agnostic, just acts on a ring
-func find(id *big.Int, start Address) (*Address, error) {
+func find(id *big.Int, start Address) (Address, error) {
 	result := AddressResult{
 		Found:   false,
-		Address: &start,
+		Address: start,
 	}
 	i := 0
 	for !result.Found && i < maxRequests {
-		if err := call(*result.Address, "NodeActor.FindSuccessor", id, &result); err != nil {
+		if err := call(result.Address, "NodeActor.FindSuccessor", id, &result); err != nil {
 			return result.Address, fmt.Errorf("find successor: %v", err)
 		}
 		i++
@@ -31,13 +31,13 @@ func find(id *big.Int, start Address) (*Address, error) {
 }
 
 // Search local fingers for highest predecessor of id
-func (n Node) closestPrecedingNode(id *big.Int) *Address {
+func (n Node) closestPrecedingNode(id *big.Int) Address {
 	for i := numFingerEntries - 1; i > 0; i-- {
-		if n.Fingers[i] == nil {
+		if n.Fingers[i] == "" {
 			continue
 		}
 		if between(n.Hash, n.Fingers[i].hashed(), id, false) {
-			log.Printf("closest preceding node: using finger entry @ index %d", i)
+			// log.Printf("closest preceding node: using finger entry @ index %d", i)
 			return n.Fingers[i]
 		}
 	}
@@ -48,10 +48,9 @@ func (n Node) closestPrecedingNode(id *big.Int) *Address {
 // Create local node instance
 func createNode() *Node {
 	return &Node{
-		Address:     Address(localHost + ":" + fmt.Sprint(localPort)),
-		Hash:        Address(localHost + ":" + fmt.Sprint(localPort)).hashed(),
-		Predecessor: nil,
-		Data:        make(map[Key]string),
+		Address: Address(localHost + ":" + fmt.Sprint(localPort)),
+		Hash:    Address(localHost + ":" + fmt.Sprint(localPort)).hashed(),
+		Data:    make(map[Key]string),
 	}
 }
 
@@ -63,7 +62,7 @@ func createRing() (*Node, error) {
 	}
 	log.Println("created ring successfully")
 	// Set successor to itself
-	n.Successors = append(n.Successors, &n.Address)
+	n.Successors = append(n.Successors, n.Address)
 	// Start background tasks
 	n.startBackgroundMaintenance()
 	return n, nil
@@ -89,7 +88,7 @@ func joinRing(joinAddress Address) (*Node, error) {
 	return n, nil
 }
 
-// Returns true if elt is between start and end on the ring, inclusive is for the end range
+// Returns true if elt is between start and end on the ring, inclusive affects the end range. Is exclusive on the start range
 func between(start *big.Int, elt *big.Int, end *big.Int, inclusive bool) bool {
 	if end.Cmp(start) > 0 {
 		return (start.Cmp(elt) < 0 && elt.Cmp(end) < 0) || (inclusive && elt.Cmp(end) == 0)
@@ -109,14 +108,14 @@ func (n Node) String() string {
 	}
 
 	// Print only unique finger table entries
-	unique := make(map[*Address]int)
-	for i, address := range n.Fingers {
-		unique[address] = i
-	}
+	unique := make(map[Address]struct{})
 	w.WriteString("\nFinger table:\n")
-	for address, i := range unique {
-		if address != nil {
-			w.WriteString(fmt.Sprintf("   [%d]: %s\n", i, address))
+	for i, address := range n.Fingers {
+		if address != "" {
+			if _, exists := unique[address]; !exists {
+				unique[address] = struct{}{}
+				w.WriteString(fmt.Sprintf("   [%d]: %s\n", i, address))
+			}
 		}
 	}
 
