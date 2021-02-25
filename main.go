@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"os"
@@ -17,10 +18,25 @@ var (
 	joined    = false // Whether this node is part of a ring yet
 )
 
+// A way to color the log yellow
+type myWriter struct {
+	w io.Writer
+}
+
+func (w myWriter) Write(p []byte) (n int, err error) {
+	w.w.Write([]byte(ansiColors["yellow"]))
+	n, err = w.w.Write(p)
+	w.w.Write([]byte("\x1b[0m"))
+	return
+}
+
 func main() {
+	createMaps()
 	rand.Seed(time.Now().Unix())
+
 	// DEBUGGING
 	log.SetFlags(log.Lshortfile)
+	log.SetOutput(myWriter{os.Stdout})
 
 	fmt.Print("Welcome to the CHORD distributed hash table(DHT)\n\n")
 
@@ -30,7 +46,6 @@ func main() {
 
 	fmt.Println()
 
-	createMaps()
 	defaultCommands()
 
 	commandLoop()

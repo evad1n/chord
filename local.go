@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"sort"
 	"strings"
 )
 
@@ -113,15 +114,27 @@ func (n Node) String() string {
 	}
 
 	// Print only unique finger table entries
-	unique := make(map[Address]struct{})
-	w.WriteString("\nFinger table:\n")
+	unique := make(map[Address]int)
 	for i, address := range n.Fingers {
+		unique[address] = i
+	}
+
+	type fingerEntry struct {
+		entry   int
+		address Address
+	}
+	orderedUnique := []fingerEntry{}
+	for address, entry := range unique {
 		if address != "" {
-			if _, exists := unique[address]; !exists {
-				unique[address] = struct{}{}
-				w.WriteString(fmt.Sprintf("   [%d]: %s\n", i, address))
-			}
+			orderedUnique = append(orderedUnique, fingerEntry{entry, address})
 		}
+	}
+	sort.Slice(orderedUnique, func(i, j int) bool {
+		return orderedUnique[i].entry < orderedUnique[j].entry
+	})
+	w.WriteString("\nFinger table:\n")
+	for _, finger := range orderedUnique {
+		w.WriteString(fmt.Sprintf("   %-5s: %s\n", fmt.Sprintf("[%d]", finger.entry), finger.address))
 	}
 
 	if len(n.Data) > 0 {
