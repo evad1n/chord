@@ -14,7 +14,7 @@ import (
 func getLocalAddress() string {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("looking up IP address: %v", err)
 	}
 	defer conn.Close()
 

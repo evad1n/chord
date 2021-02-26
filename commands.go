@@ -236,7 +236,8 @@ func quit(_ string) error {
 		// Offload all keys
 		if localNode.Successors[0] != localNode.Address {
 			if err := call(localNode.Successors[0], "NodeActor.PutAll", localNode.Data, &None{}); err != nil {
-				log.Fatalf("offloading data to successor: %v", err)
+				// Will not actually quit; let user handle
+				return fmt.Errorf("offloading data to successor: %v", err)
 			}
 			log.Println("Successfully offloaded data to successor")
 		} else {
@@ -339,8 +340,7 @@ func dumpKey(input string) error {
 		if err != nil {
 			return fmt.Errorf("finding node with key: %v", err)
 		}
-		// FIX: should i error if key doesn't exist (extra get check)
-		// Now get the value
+		// Get dump info
 		var dump DumpReturn
 		if err := call(address, "NodeActor.Dump", None{}, &dump); err != nil {
 			return fmt.Errorf("getting dump info: %v", err)
@@ -358,6 +358,7 @@ func dumpAddress(inputAddress string) error {
 	if err != nil {
 		return fmt.Errorf("bad address: %v", err)
 	}
+	// Get dump info
 	var dump DumpReturn
 	if err := call(address, "NodeActor.Dump", None{}, &dump); err != nil {
 		return fmt.Errorf("getting dump info: %v", err)
@@ -382,7 +383,7 @@ func dumpAll(_ string) error {
 			return fmt.Errorf("getting dump info: %v", err)
 		}
 		// Separator
-		fmt.Println(strings.Repeat("=", 30) + "\n")
+		fmt.Println(strings.Repeat("=", 50) + "\n")
 		fmt.Println(dump.Dump)
 	}
 	return nil
@@ -449,7 +450,6 @@ func putRandom(input string) error {
 		return fmt.Errorf("bad number: %v", err)
 	} else {
 		for i := 0; i < count; i++ {
-
 			kv := KeyValue{
 				Key:   Key(randomString(5)),
 				Value: randomString(5),

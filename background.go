@@ -81,23 +81,17 @@ func (n *Node) stabilize() error {
 		}
 
 		// Add current node's first successor to successor's successor list
-		// Prepend current successor to a slice of the successors
-		n.Successors = append([]Address{n.Successors[0]}, links.Successors...)
-		// Truncate if necessary
-		if len(n.Successors) > maxSuccessors {
-			n.Successors = n.Successors[:maxSuccessors]
-		}
+		n.prependSuccessor(n.Successors[0], links.Successors)
 
 		// Update predecessor links
 
 		// Check if our successor's predecessor should be our successor
 		if links.Predecessor != "" && between(n.Hash, links.Predecessor.hashed(), n.Successors[0].hashed(), false) {
 			// Set our successor to be this node in between now
-			n.Successors[0] = links.Predecessor
+			n.prependSuccessor(links.Predecessor, n.Successors)
 			log.Printf("stabilize: better successor found: %s\n", n.Successors[0])
 		}
 	}
-	// FIX: Without checkPredecessor the predecessor might have failed and this will crash
 	// Notify successor to check its predecessor
 	if err := call(n.Successors[0], "NodeActor.Notify", n.Address, &None{}); err != nil {
 		return fmt.Errorf("notifying successor: %v", err)
@@ -117,13 +111,14 @@ func (n *Node) fixFingers() error {
 		return fmt.Errorf("finding finger table entry: %v", err)
 	}
 	changed := n.Fingers[next] == "" || (address != n.Fingers[next])
+	n.Fingers[next] = address
 	// Optimization because sparse nodes mean the successor for each entry is probably the same
 	if changed {
 		log.Printf("fixFingers: writing new entry %d as %s", next, address)
 	}
-	for next < numFingerEntries && between(n.Hash, n.jump(next), address.hashed(), false) {
-		n.Fingers[next] = address
+	for next+1 < numFingerEntries && between(n.Hash, n.jump(next+1), address.hashed(), false) {
 		next++
+		n.Fingers[next] = address
 	}
 	if changed {
 		log.Printf("fixFingers: repeated up to entry %d", next-1)
@@ -159,4 +154,15 @@ func (n Node) jump(fingerentry int) *big.Int {
 	sum := new(big.Int).Add(n.Hash, jump)
 
 	return new(big.Int).Mod(sum, hashMod)
+}
+
+// Prepend current successor to a slice of the successors and truncate
+func (n *Node) prependSuccessor(first Address, rest []Address) {
+	// Add current node's first successor to successor's successor list
+	// Prepend current successor to a slice of the successors
+	n.Successors = append([]Address{first}, rest...)
+	// Truncate if necessary
+	if len(n.Successors) > maxSuccessors {
+		n.Successors = n.Successors[:maxSuccessors]
+	}
 }

@@ -78,15 +78,11 @@ func (a NodeActor) FindSuccessor(id *big.Int, result *AddressResult) error {
 	a.wait(func(n *Node) {
 		// If it is between us and our successor
 		if between(n.Hash, id, n.Successors[0].hashed(), true) {
-			*result = AddressResult{
-				Found:   true,
-				Address: n.Successors[0],
-			}
+			result.Found = true
+			result.Address = n.Successors[0]
 		} else {
-			*result = AddressResult{
-				Found:   false,
-				Address: n.closestPrecedingNode(id),
-			}
+			result.Found = false
+			result.Address = n.closestPrecedingNode(id)
 		}
 	})
 	return nil
@@ -106,10 +102,8 @@ func (a NodeActor) Notify(address Address, _ *None) error {
 // GetNodeLinks returns the successors and predecessor of a node
 func (a NodeActor) GetNodeLinks(request None, links *NodeLink) error {
 	a.wait(func(n *Node) {
-		*links = NodeLink{
-			Predecessor: n.Predecessor,
-			Successors:  n.Successors,
-		}
+		links.Predecessor = n.Predecessor
+		links.Successors = n.Successors
 	})
 	return nil
 }
@@ -177,10 +171,8 @@ func (a NodeActor) GetAll(newAddress Address, data *map[Key]string) error {
 // Dump delivers all info on a node
 func (a NodeActor) Dump(_ None, dumpReturn *DumpReturn) error {
 	a.wait(func(n *Node) {
-		*dumpReturn = DumpReturn{
-			Dump:      n.String(),
-			Successor: n.Successors[0],
-		}
+		dumpReturn.Dump = n.String()
+		dumpReturn.Successor = n.Successors[0]
 	})
 	return nil
 }

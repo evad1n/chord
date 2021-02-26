@@ -12,7 +12,6 @@ type (
 	handler func(*Node)
 
 	// Node is a part of the chord ring
-	// FIX: store as pointers or not?
 	Node struct {
 		Address     Address  // The string representation of an address (HOST:PORT)
 		Hash        *big.Int // The hash of the address
