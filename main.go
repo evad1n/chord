@@ -63,7 +63,6 @@ func commandLoop() {
 				switch {
 				case !joined && cmd.joinRequired:
 					fmt.Println(ansiWrap("must join a ring for this command", ansiColors["red"]))
-					break
 				default:
 					if err := cmd.do(params); err != nil {
 						fmt.Println(ansiWrap(err.Error(), ansiColors["red"]))

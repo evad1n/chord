@@ -251,7 +251,7 @@ Are you sure? (y/n) `,
 			scanner.Scan()
 			switch {
 			case scanner.Text() == "y":
-				break
+				fmt.Println("Ring terminated")
 			default:
 				return errors.New("quit aborted")
 			}
