@@ -74,6 +74,11 @@ func defaultCommands() {
 		description: "Quit and offload node data gracefully",
 		do:          quit,
 	}
+	commands["log"] = command{
+		description: "Turn logging ON/OFF",
+		usage:       "log <0|1>",
+		do:          setLogging,
+	}
 	commands["port"] = command{
 		description: "Change the listening port",
 		usage:       "port <number>",
@@ -262,6 +267,25 @@ Are you sure? (y/n) `,
 	return nil
 }
 
+func setLogging(input string) error {
+	if words := strings.Fields(input); len(words) == 1 {
+		val, err := strconv.ParseBool(input)
+		if err != nil {
+			return fmt.Errorf("bad value: %v", err)
+		}
+
+		logging = val
+		if val {
+			fmt.Println("Logging turned ON")
+		} else {
+			fmt.Println("Logging turned OFF")
+		}
+	} else {
+		return fmt.Errorf("wrong number of arguments: %s", commands["log"].usage)
+	}
+	return nil
+}
+
 // Change port to listen on, can't be done after joining
 func changePort(p string) error {
 	if !joined {
@@ -347,7 +371,7 @@ func dumpKey(input string) error {
 		}
 		fmt.Println(dump.Dump)
 	} else {
-		fmt.Println("Wrong number of arguments: <key>")
+		return fmt.Errorf("wrong number of arguments: %s", commands["dumpkey"].usage)
 	}
 	return nil
 }
@@ -398,7 +422,7 @@ func put(input string) error {
 			return fmt.Errorf("put error: %v", err)
 		}
 	} else {
-		return errors.New("Wrong number of arguments: <key> <value>")
+		return fmt.Errorf("wrong number of arguments: %s", commands["put"].usage)
 	}
 	return nil
 }
@@ -419,7 +443,7 @@ func get(input string) error {
 		}
 		fmt.Println(KeyValue{key, value})
 	} else {
-		fmt.Println("Wrong number of arguments: <key>")
+		return fmt.Errorf("wrong number of arguments: %s", commands["get"].usage)
 	}
 	return nil
 }
@@ -440,7 +464,7 @@ func deleteKey(input string) error {
 		}
 		fmt.Printf("Successfully deleted item with key: %s, and value %s\n", key, value)
 	} else {
-		fmt.Println("Wrong number of arguments: <key>")
+		return fmt.Errorf("wrong number of arguments: %s", commands["delete"].usage)
 	}
 	return nil
 }
@@ -472,6 +496,6 @@ func putOne(kv KeyValue) error {
 	if err := call(address, "NodeActor.Put", kv, &None{}); err != nil {
 		return fmt.Errorf("putting: %v", err)
 	}
-	fmt.Println("successful put: ", kv)
+	log.Println("successful put: ", kv)
 	return nil
 }

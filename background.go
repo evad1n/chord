@@ -67,7 +67,7 @@ func (n *Node) stabilize() error {
 		n.Successors = n.Successors[1:]
 		if len(n.Successors) == 0 {
 			// No successors so set successor to ourself
-			n.Successors = append(n.Successors, n.Address)
+			n.Successors = []Address{n.Address}
 		}
 		log.Printf("stabilize: sucessor failure, new successor is %s: %v\n", n.Successors[0], err)
 	} else {

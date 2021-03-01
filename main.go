@@ -16,6 +16,8 @@ var (
 	localPort = 3400  // Port to listen on
 	localNode *Node   // The local node, only set after join/creation
 	joined    = false // Whether this node is part of a ring yet
+
+	logging = false // Whether to print log messages
 )
 
 // A way to color the log yellow
@@ -24,6 +26,9 @@ type myWriter struct {
 }
 
 func (w myWriter) Write(p []byte) (n int, err error) {
+	if !logging {
+		return
+	}
 	w.w.Write([]byte(ansiColors["yellow"]))
 	n, err = w.w.Write(p)
 	w.w.Write([]byte("\x1b[0m"))
