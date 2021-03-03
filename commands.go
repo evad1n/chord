@@ -87,10 +87,17 @@ func defaultCommands() {
 	commands["getaddr"] = command{
 		description: "Get the current node address",
 		do: func(_ string) error {
-			fmt.Println(localNode.Address)
+			fmt.Println(Address(localHost + ":" + fmt.Sprint(localPort)))
 			return nil
 		},
-		joinRequired: true,
+	}
+	commands["gethash"] = command{
+		description: "Print a hashed value",
+		usage:       "gethash <input>",
+		do: func(input string) error {
+			fmt.Println(readableHash(hashString(input)))
+			return nil
+		},
 	}
 	commands["ping"] = command{
 		description: "Ping another node",
@@ -462,7 +469,7 @@ func deleteKey(input string) error {
 		if err := call(address, "NodeActor.Delete", key, &value); err != nil {
 			return fmt.Errorf("deleting: %v", err)
 		}
-		fmt.Printf("Successfully deleted item with key: %s, and value %s\n", key, value)
+		fmt.Printf("Successfully deleted item with key: %s, value: %s\n", key, value)
 	} else {
 		return fmt.Errorf("wrong number of arguments: %s", commands["delete"].usage)
 	}

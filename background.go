@@ -12,9 +12,9 @@ const (
 	maxSuccessors    = 5
 	numFingerEntries = 161
 
-	stabilizeInterval        = 2
-	fixFingersInterval       = 2
-	checkPredecessorInterval = 2
+	stabilizeInterval        = 1
+	fixFingersInterval       = 1
+	checkPredecessorInterval = 1
 )
 
 var next = 0 // The next entry in the finger table to fix
@@ -121,7 +121,7 @@ func (n *Node) fixFingers() error {
 		n.Fingers[next] = address
 	}
 	if changed {
-		log.Printf("fixFingers: repeated up to entry %d", next-1)
+		log.Printf("fixFingers: repeated up to entry %d", next)
 	}
 
 	return nil

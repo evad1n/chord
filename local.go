@@ -139,8 +139,16 @@ func (n Node) String() string {
 
 	if len(n.Data) > 0 {
 		w.WriteString("\nData items:\n")
+		// Order keys in map by hash
+		ordered := []KeyValue{}
 		for key, value := range n.Data {
-			w.WriteString(fmt.Sprintf("   %s\n", KeyValue{key, value}))
+			ordered = append(ordered, KeyValue{key, value})
+		}
+		sort.Slice(ordered, func(i, j int) bool {
+			return ordered[i].Key.hashed().Cmp(ordered[j].Key.hashed()) < 0
+		})
+		for _, kv := range ordered {
+			w.WriteString(fmt.Sprintf("   %s\n", kv))
 		}
 	} else {
 		w.WriteString("\nNo data items\n")
