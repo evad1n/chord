@@ -77,13 +77,13 @@ func joinRing(joinAddress Address) (*Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("finding place on ring: %v", err)
 	}
-	log.Printf("joining ring @ %s\n", successor)
-	n.Successors = append(n.Successors, successor)
-
 	// Now start server
 	if err := n.startNode(); err != nil {
 		return n, fmt.Errorf("starting node RPC server: %v", err)
 	}
+	log.Printf("joining ring @ %s\n", successor)
+	// Set successor
+	n.Successors = append(n.Successors, successor)
 	// Start background tasks
 	n.startBackgroundMaintenance()
 	// Ask for successor for any data that should be ours
@@ -98,9 +98,8 @@ func joinRing(joinAddress Address) (*Node, error) {
 func between(start *big.Int, elt *big.Int, end *big.Int, inclusive bool) bool {
 	if end.Cmp(start) > 0 {
 		return (start.Cmp(elt) < 0 && elt.Cmp(end) < 0) || (inclusive && elt.Cmp(end) == 0)
-	} else {
-		return start.Cmp(elt) < 0 || elt.Cmp(end) < 0 || (inclusive && elt.Cmp(end) == 0)
 	}
+	return start.Cmp(elt) < 0 || elt.Cmp(end) < 0 || (inclusive && elt.Cmp(end) == 0)
 }
 
 // Stringer interface for Node dump

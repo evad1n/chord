@@ -477,17 +477,17 @@ func deleteKey(input string) error {
 }
 
 func putRandom(input string) error {
-	if count, err := strconv.Atoi(input); err != nil {
+	count, err := strconv.Atoi(input)
+	if err != nil {
 		return fmt.Errorf("bad number: %v", err)
-	} else {
-		for i := 0; i < count; i++ {
-			kv := KeyValue{
-				Key:   Key(randomString(5)),
-				Value: randomString(5),
-			}
-			if err := putOne(kv); err != nil {
-				return fmt.Errorf("put error: %v", err)
-			}
+	}
+	for i := 0; i < count; i++ {
+		kv := KeyValue{
+			Key:   Key(randomString(5)),
+			Value: randomString(5),
+		}
+		if err := putOne(kv); err != nil {
+			return fmt.Errorf("put error: %v", err)
 		}
 	}
 	return nil
