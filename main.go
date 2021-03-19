@@ -50,6 +50,11 @@ func main() {
 	localHost = getLocalAddress()
 	fmt.Printf("Current address: %s\n", localHost)
 	fmt.Printf("Current port: %d\n", localPort)
+	if logging {
+		fmt.Println("Logging is turned ON")
+	} else {
+		fmt.Println("Logging is turned OFF")
+	}
 	fmt.Println()
 
 	commandLoop()

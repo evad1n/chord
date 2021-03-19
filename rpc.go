@@ -40,7 +40,7 @@ func (n *Node) startActor() NodeActor {
 }
 
 // Blocks until actor executes
-func (a NodeActor) wait(f handler) {
+func (a NodeActor) run(f handler) {
 	done := make(chan None)
 	a <- func(n *Node) {
 		f(n)
@@ -67,7 +67,7 @@ func call(address Address, method string, request interface{}, reply interface{}
 
 // Ping simply tests an RPC connection
 func (a NodeActor) Ping(_ None, reply *bool) error {
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		*reply = true
 	})
 	return nil
@@ -75,7 +75,7 @@ func (a NodeActor) Ping(_ None, reply *bool) error {
 
 // FindSuccessor asks the node to find the successor of an id, or a better node to continue the search with
 func (a NodeActor) FindSuccessor(id *big.Int, result *AddressResult) error {
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		// If it is between us and our successor
 		if between(n.Hash, id, n.Successors[0].hashed(), true) {
 			result.Found = true
@@ -90,7 +90,7 @@ func (a NodeActor) FindSuccessor(id *big.Int, result *AddressResult) error {
 
 // Notify signals a node that another node thinks it should be its predecessor
 func (a NodeActor) Notify(address Address, _ *None) error {
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		if n.Predecessor == "" || between(n.Predecessor.hashed(), address.hashed(), n.Hash, false) {
 			log.Println("Notify: found new predecessor")
 			n.Predecessor = address
@@ -101,7 +101,7 @@ func (a NodeActor) Notify(address Address, _ *None) error {
 
 // GetNodeLinks returns the successors and predecessor of a node
 func (a NodeActor) GetNodeLinks(request None, links *NodeLink) error {
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		links.Predecessor = n.Predecessor
 		links.Successors = n.Successors
 	})
@@ -110,7 +110,7 @@ func (a NodeActor) GetNodeLinks(request None, links *NodeLink) error {
 
 // Put adds an item to the database
 func (a NodeActor) Put(kv KeyValue, _ *None) error {
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		n.Data[kv.Key] = kv.Value
 	})
 	return nil
@@ -119,7 +119,7 @@ func (a NodeActor) Put(kv KeyValue, _ *None) error {
 // Get retrieves the value of a key in the database
 func (a NodeActor) Get(key Key, value *string) error {
 	var err error
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		if val, exists := n.Data[key]; exists {
 			*value = val
 		} else {
@@ -132,7 +132,7 @@ func (a NodeActor) Get(key Key, value *string) error {
 // Delete removes a key and its associated value from the database
 func (a NodeActor) Delete(key Key, value *string) error {
 	var err error
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		if val, exists := n.Data[key]; exists {
 			*value = val
 			delete(n.Data, key)
@@ -146,7 +146,7 @@ func (a NodeActor) Delete(key Key, value *string) error {
 // PutAll adds all key/value pairs in a map to the local data
 func (a NodeActor) PutAll(data map[Key]string, _ *None) error {
 	var err error
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		for key, value := range data {
 			n.Data[key] = value
 		}
@@ -157,7 +157,7 @@ func (a NodeActor) PutAll(data map[Key]string, _ *None) error {
 // GetAll gathers all key/value pairs from a node and transfers them to a newly joined node that they belong to
 func (a NodeActor) GetAll(newAddress Address, data *map[Key]string) error {
 	var err error
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		for key, value := range n.Data {
 			if !between(newAddress.hashed(), key.hashed(), n.Hash, true) {
 				(*data)[key] = value
@@ -170,7 +170,7 @@ func (a NodeActor) GetAll(newAddress Address, data *map[Key]string) error {
 
 // Dump delivers all info on a node
 func (a NodeActor) Dump(_ None, dumpReturn *DumpReturn) error {
-	a.wait(func(n *Node) {
+	a.run(func(n *Node) {
 		dumpReturn.Dump = n.String()
 		dumpReturn.Successor = n.Successors[0]
 	})
